@@ -96,24 +96,29 @@ std::string Runtime::Generate(const std::string_view prompt, const std::size_t m
 
     std::int32_t currentToken = SampleGreedy();
 
-    for (std::size_t i = 0;
-         i < maximumNewTokens;
-         ++i)
-    {
-        
-        generatedTokens.push_back(currentToken);
+    // for (std::size_t i = 0; i < maximumNewTokens; ++i)
+    // {
+    //     generatedTokens.push_back(currentToken);
+    //
+    //     if (i + 1 < maximumNewTokens)
+    //     {
+    //         currentToken =
+    //             GenerateNextToken(currentToken);
+    //     }
+    // }
 
-        if (i + 1 < maximumNewTokens)
-        {
-            auto start = std::chrono::steady_clock::now();
-            currentToken =
-                GenerateNextToken(currentToken);
-            auto end = std::chrono::steady_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-            
-            std::cout << "token: " << i << " generated in " << elapsed.count() << '\n'; 
-        }
-    }
+    auto start = std::chrono::steady_clock::now();
+
+    for (std::size_t i = 0; i < maximumNewTokens; ++i)
+        currentToken = GenerateNextToken(currentToken);
+
+    auto end = std::chrono::steady_clock::now();
+
+    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+    std::cout << "Total: " << elapsed.count() << " us\n";
+    std::cout << "Per token: " << static_cast<double>(elapsed.count()) / maximumNewTokens << " us\n";
+    std::cout << "Tokens/s: " << maximumNewTokens * 1'000'000.0 / elapsed.count() << '\n';
 
     return Decode(generatedTokens);
 }

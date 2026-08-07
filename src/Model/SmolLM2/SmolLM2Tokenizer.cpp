@@ -103,7 +103,8 @@ namespace
             const auto second = static_cast<std::uint8_t>(text[position++]);
             const auto third = static_cast<std::uint8_t>(text[position++]);
             const auto fourth = static_cast<std::uint8_t>(text[position++]);
-            return static_cast<char32_t>(((first & 0x07) << 18) | ((second & 0x3F) << 12) | ((third & 0x3F) << 6) | (fourth & 0x3F));
+            return static_cast<char32_t>(((first & 0x07) << 18) | ((second & 0x3F) << 12) | ((third & 0x3F) << 6) | (
+                fourth & 0x3F));
         }
 
         throw std::runtime_error("Invalid UTF-8");
@@ -141,7 +142,7 @@ namespace
 
     void ByteLevelSplit(std::string_view text, std::vector<std::string_view>& result)
     {
-        static constexpr std::array<std::string_view, 7> contractions{ "'s", "'t", "'re", "'ve", "'m", "'ll", "'d" };
+        static constexpr std::array<std::string_view, 7> contractions{"'s", "'t", "'re", "'ve", "'m", "'ll", "'d"};
 
         std::size_t position = 0;
 
@@ -165,7 +166,8 @@ namespace
 
             const auto current = static_cast<unsigned char>(text[position]);
 
-            if (current == ' ' && position + 1 < text.size() && IsLetter(static_cast<unsigned char>(text[position + 1])))
+            if (current == ' ' && position + 1 < text.size() &&
+                IsLetter(static_cast<unsigned char>(text[position + 1])))
             {
                 std::size_t end = position + 2;
                 while (end < text.size() && IsLetter(static_cast<unsigned char>(text[end])))
@@ -384,7 +386,8 @@ std::vector<std::int32_t> SmolLM2Tokenizer::Encode(std::string_view text) const
 
         for (const auto& token : m_AddedTokens)
         {
-            if (text.substr(position, token.first.size()) == token.first && (matchedToken == nullptr || token.first.size() > matchedToken->first.size()))
+            if (text.substr(position, token.first.size()) == token.first && (matchedToken == nullptr || token.first.
+                size() > matchedToken->first.size()))
                 matchedToken = &token;
         }
 

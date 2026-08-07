@@ -27,64 +27,70 @@ namespace Utils::Detail
         unsigned& edx
     ) noexcept
     {
+
+
+
 #if defined(_MSC_VER)
-        int registers[4]{};
+    int registers[4]{};
 
-        __cpuid(registers, 0);
+    __cpuid(registers, 0);
 
-        if (static_cast<unsigned>(registers[0]) < leaf)
+        if (static_cast<unsigned>(registers[0])< leaf)
         {
             return false;
         }
 
-        __cpuidex(
-            registers,
-            static_cast<int>(leaf),
-            static_cast<int>(subleaf)
-        );
+    __cpuidex(
+        registers,
+        static_cast<int>(leaf),
+        static_cast<int>(subleaf)
+    );
 
-        eax = static_cast<unsigned>(registers[0]);
-        ebx = static_cast<unsigned>(registers[1]);
-        ecx = static_cast<unsigned>(registers[2]);
-        edx = static_cast<unsigned>(registers[3]);
+    eax=static_cast<unsigned>(registers[0]);
+    ebx=static_cast<unsigned>(registers[1]);
+    ecx=static_cast<unsigned>(registers[2]);
+    edx=static_cast<unsigned>(registers[3]);
 
         return true;
 
 #elif defined(__GNUC__) || defined(__clang__)
-        if (__get_cpuid_max(0, nullptr) < leaf)
+    if (__get_cpuid_max(0, nullptr) < leaf)
         {
             return false;
         }
 
         return __get_cpuid_count(
-            leaf,
-            subleaf,
-            &eax,
-            &ebx,
-            &ecx,
-            &edx
-        );
+        leaf,
+        subleaf,
+        &eax,
+        &ebx,
+        &ecx,
+        &edx
+    );
 #endif
     }
 
     inline std::uint64_t ReadXCR0() noexcept
     {
+
+
+
 #if defined(_MSC_VER)
-        return _xgetbv(0);
+    return _xgetbv (0);
 
 #elif defined(__GNUC__) || defined(__clang__)
-        unsigned eax;
-        unsigned edx;
+    unsigned eax;
+    unsigned edx;
 
-        __asm__ volatile (
+    __asm__ volatile (
         "xgetbv"
         : "=a"(eax), "=d"(edx)
         : "c"(0)
     );
 
         return
-            static_cast<std::uint64_t>(eax) |
-            (static_cast<std::uint64_t>(edx) << 32);
+            static_cast<std::uint64_t>(eax)|
+    (static_cast<std::uint64_t>(edx)<< 32);
 #endif
     }
 

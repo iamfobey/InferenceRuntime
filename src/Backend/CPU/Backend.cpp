@@ -21,7 +21,7 @@ CpuBackend::CpuBackend(const CpuBackendOptions options)
     {
         m_Options.threadCount = 1;
     }
-    
+
     omp_set_dynamic(0);
     omp_set_num_threads(m_Options.threadCount);
 }
@@ -39,7 +39,8 @@ Tensor CpuBackend::CreateTensor(
     Tensor tensor = {
         .shape = std::move(shape),
         .strides = Utils::CreateContiguousStrides(tensor.shape),
-        .buffer = std::make_shared<CpuBuffer>(Math::CheckedMultiply(Utils::ElementCount(tensor.shape), Utils::DataTypeSize(dataType))),
+        .buffer = std::make_shared<CpuBuffer>(
+            Math::CheckedMultiply(Utils::ElementCount(tensor.shape), Utils::DataTypeSize(dataType))),
         .byteOffset = 0,
         .dataType = dataType,
     };

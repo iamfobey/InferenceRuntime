@@ -51,7 +51,7 @@ int main(const int argc, char** argv)
             return 1;
         }
 
-        constexpr std::size_t maximumNewTokens = 32;
+        constexpr std::size_t maximumNewTokens = 300;
 
         const std::string generatedText =
             runtime.Generate(

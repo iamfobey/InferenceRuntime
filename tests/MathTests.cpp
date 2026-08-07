@@ -25,7 +25,7 @@ TEST(LinearTests, CalculatesExpectedValues)
         -1.0f
     };
 
-    std::array<float, J> y{};
+    std::array < float, J > y{};
 
     Math::Linear(
         W.data(),

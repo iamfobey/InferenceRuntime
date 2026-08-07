@@ -14,12 +14,12 @@ namespace Math
     );
 
     void Linear(
-        const float* mat,
-        const float* vec,
-        const float* offset,
+        const float* matrix,
+        const float* input,
+        const float* bias,
         float* output,
-        std::size_t matRows,
-        std::size_t matColumns
+        std::size_t rows,
+        std::size_t columns
     );
 
     void RMSNorm(

@@ -5,11 +5,6 @@
 
 #include "simdjson/simdjson.h"
 
-namespace std::filesystem
-{
-    class path;
-}
-
 struct SmolLM2Config
 {
     std::string_view torchDtype;

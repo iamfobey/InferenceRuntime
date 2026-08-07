@@ -21,7 +21,8 @@ std::string_view SmolLM2Model::Architecture() const noexcept
 namespace
 {
     void CreateAndUploadTensor(IBackend& backend, Tensor& tensor, std::ifstream& file, std::uint64_t headerSize,
-                               std::uint64_t startOffset, std::uint64_t endOffset, const std::vector<std::size_t>& shape)
+                               std::uint64_t startOffset, std::uint64_t endOffset,
+                               const std::vector<std::size_t>& shape)
     {
         tensor = backend.CreateTensor(shape, DataType::Float32);
 
@@ -104,40 +105,49 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
             }
             else if (tensorName == makeTensorName("input_layernorm"))
             {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].layernorm, file, headerSize, startOffset, endOffset, shape);
+                CreateAndUploadTensor(backend, m_Layers[currentLayer].layernorm, file, headerSize, startOffset,
+                                      endOffset, shape);
             }
             else if (tensorName == makeTensorName("mlp.down_proj"))
             {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].downProj, file, headerSize, startOffset, endOffset, shape);
+                CreateAndUploadTensor(backend, m_Layers[currentLayer].downProj, file, headerSize, startOffset,
+                                      endOffset, shape);
             }
             else if (tensorName == makeTensorName("mlp.gate_proj"))
             {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].gateProj, file, headerSize, startOffset, endOffset, shape);
+                CreateAndUploadTensor(backend, m_Layers[currentLayer].gateProj, file, headerSize, startOffset,
+                                      endOffset, shape);
             }
             else if (tensorName == makeTensorName("mlp.up_proj"))
             {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].upProj, file, headerSize, startOffset, endOffset, shape);
+                CreateAndUploadTensor(backend, m_Layers[currentLayer].upProj, file, headerSize, startOffset, endOffset,
+                                      shape);
             }
             else if (tensorName == makeTensorName("post_attention_layernorm"))
             {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].postAttentionLayernorm, file, headerSize, startOffset, endOffset,
+                CreateAndUploadTensor(backend, m_Layers[currentLayer].postAttentionLayernorm, file, headerSize,
+                                      startOffset, endOffset,
                                       shape);
             }
             else if (tensorName == makeTensorName("self_attn.k_proj"))
             {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].selfAttnK, file, headerSize, startOffset, endOffset, shape);
+                CreateAndUploadTensor(backend, m_Layers[currentLayer].selfAttnK, file, headerSize, startOffset,
+                                      endOffset, shape);
             }
             else if (tensorName == makeTensorName("self_attn.o_proj"))
             {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].selfAttnO, file, headerSize, startOffset, endOffset, shape);
+                CreateAndUploadTensor(backend, m_Layers[currentLayer].selfAttnO, file, headerSize, startOffset,
+                                      endOffset, shape);
             }
             else if (tensorName == makeTensorName("self_attn.q_proj"))
             {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].selfAttnQ, file, headerSize, startOffset, endOffset, shape);
+                CreateAndUploadTensor(backend, m_Layers[currentLayer].selfAttnQ, file, headerSize, startOffset,
+                                      endOffset, shape);
             }
             else if (tensorName == makeTensorName("self_attn.v_proj"))
             {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].selfAttnV, file, headerSize, startOffset, endOffset, shape);
+                CreateAndUploadTensor(backend, m_Layers[currentLayer].selfAttnV, file, headerSize, startOffset,
+                                      endOffset, shape);
             }
         }
 
@@ -232,7 +242,7 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
         {
             return true;
         }
-        
+
         return false;
     }
 
@@ -282,7 +292,8 @@ void SmolLM2Model::DecodeStep(std::int32_t tokenId, IBackend& backend)
 
     for (std::size_t layerIndex = 0; layerIndex < m_Layers.size(); ++layerIndex)
     {
-        auto& [layernorm, downProj, gateProj, upProj, postAttentionLayernorm, selfAttnK, selfAttnO, selfAttnQ, selfAttnV] = m_Layers[
+        auto& [layernorm, downProj, gateProj, upProj, postAttentionLayernorm, selfAttnK, selfAttnO, selfAttnQ,
+            selfAttnV] = m_Layers[
             layerIndex];
 
         backend.RMSNorm(

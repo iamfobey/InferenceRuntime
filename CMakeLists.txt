@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 4.3)
+﻿cmake_minimum_required(VERSION 3.25.1)
 
 project(InferenceRuntime LANGUAGES CXX)
 
@@ -6,29 +6,22 @@ include(CheckCXXCompilerFlag)
 include(FetchContent)
 include(CTest)
 
-find_package(OpenMP REQUIRED)
+option(ENABLE_OPENMP "Enable OpenMP" ON)
+option(ENABLE_AVX2 "Enable AVX2" ON)
+
+set(HAVE_OPENMP_SUPPORT 0)
+set(HAVE_AVX2_SUPPORT 0)
 
 file(GLOB_RECURSE RUNTIME_SOURCES CONFIGURE_DEPENDS
-        # src
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
-
-        # thirdparty
         "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/simdjson/simdjson.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/simdjson/simdjson.h"
 )
 
 list(FILTER RUNTIME_SOURCES EXCLUDE REGEX ".*/Main\\.cpp$")
-list(FILTER RUNTIME_SOURCES EXCLUDE REGEX ".*/Math/(Default)\\.cpp$")
 
-set(MATH_IMPLEMENTATION
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/Math/Default.cpp"
-)
-
-add_library(runtime_core STATIC
-        ${RUNTIME_SOURCES}
-        ${MATH_IMPLEMENTATION}
-)
+add_library(runtime_core STATIC ${RUNTIME_SOURCES})
 
 target_include_directories(runtime_core PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -37,20 +30,42 @@ target_include_directories(runtime_core PUBLIC
 
 target_compile_features(runtime_core PUBLIC cxx_std_20)
 
-target_link_libraries(runtime_core PRIVATE OpenMP::OpenMP_CXX)
-
-if (MATH_COMPILE_OPTIONS)
-    set_property(
-            SOURCE "${MATH_IMPLEMENTATION}"
-            APPEND PROPERTY COMPILE_OPTIONS
-            ${MATH_COMPILE_OPTIONS}
-    )
+if (ENABLE_OPENMP)
+    find_package(OpenMP REQUIRED)
+    target_link_libraries(runtime_core PRIVATE OpenMP::OpenMP_CXX)
+    set(HAVE_OPENMP_SUPPORT 1)
 endif ()
 
-add_executable(InferenceRuntime
-        src/Main.cpp
+if (ENABLE_AVX2)
+    if (MSVC)
+        check_cxx_compiler_flag("/arch:AVX2" COMPILER_SUPPORTS_AVX2)
+
+        if (COMPILER_SUPPORTS_AVX2)
+            set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/Math/Math.cpp" PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
+            set(HAVE_AVX2_SUPPORT 1)
+        else ()
+            message(WARNING "AVX2 requested, but compiler does not support /arch:AVX2")
+        endif ()
+    else ()
+        check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
+
+        if (COMPILER_SUPPORTS_AVX2)
+            set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/Math/Math.cpp" PROPERTIES COMPILE_OPTIONS "-mavx2")
+            set(HAVE_AVX2_SUPPORT 1)
+        else ()
+            message(WARNING "AVX2 requested, but compiler does not support -mavx2")
+        endif ()
+    endif ()
+endif ()
+
+target_compile_definitions(runtime_core PUBLIC
+        HAVE_OPENMP_SUPPORT=${HAVE_OPENMP_SUPPORT}
+        HAVE_AVX2_SUPPORT=${HAVE_AVX2_SUPPORT}
 )
 
-target_link_libraries(InferenceRuntime PRIVATE
-        runtime_core
-)
+add_executable(InferenceRuntime src/Main.cpp)
+
+target_link_libraries(InferenceRuntime PRIVATE runtime_core)
+
+message(STATUS "OpenMP: ${HAVE_OPENMP_SUPPORT}")
+message(STATUS "AVX2: ${HAVE_AVX2_SUPPORT}")

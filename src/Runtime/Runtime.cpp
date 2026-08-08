@@ -11,12 +11,8 @@
 
 #include "Model/ITokenizer.hpp"
 
-Runtime::Runtime(
-    std::unique_ptr<IBackend> backend,
-    std::unique_ptr<IModel> model
-)
-    : m_Backend(std::move(backend)),
-      m_Model(std::move(model))
+Runtime::Runtime(std::unique_ptr<IBackend> backend, std::unique_ptr<IModel> model) : m_Backend(std::move(backend)),
+    m_Model(std::move(model))
 {
 }
 

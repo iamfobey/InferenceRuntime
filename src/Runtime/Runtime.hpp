@@ -15,37 +15,24 @@ class ITokenizer;
 class Runtime
 {
 public:
-    Runtime(
-        std::unique_ptr<IBackend> backend,
-        std::unique_ptr<IModel> model
-    );
+    Runtime(std::unique_ptr<IBackend> backend, std::unique_ptr<IModel> model);
 
+    [[nodiscard]]
     bool LoadModel(const std::string& path) const;
 
     [[nodiscard]]
-    std::vector<std::int32_t> Encode(
-        std::string_view text
-    ) const;
+    std::vector<std::int32_t> Encode(std::string_view text) const;
 
     [[nodiscard]]
-    std::string Decode(
-        std::span<const std::int32_t> tokenIds
-    ) const;
+    std::string Decode(std::span<const std::int32_t> tokenIds) const;
 
-    void Prefill(
-        std::span<const std::int32_t> tokenIds
-    ) const;
+    void Prefill(std::span<const std::int32_t> tokenIds) const;
 
     [[nodiscard]]
-    std::int32_t GenerateNextToken(
-        std::int32_t currentToken
-    ) const;
+    std::int32_t GenerateNextToken(std::int32_t currentToken) const;
 
     [[nodiscard]]
-    std::string Generate(
-        std::string_view prompt,
-        std::size_t maximumNewTokens
-    );
+    std::string Generate(std::string_view prompt, std::size_t maximumNewTokens);
 
     [[nodiscard]]
     std::string_view ModelArchitecture() const noexcept;

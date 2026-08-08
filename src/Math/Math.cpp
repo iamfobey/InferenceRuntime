@@ -18,7 +18,7 @@ namespace Math
                    const std::size_t vocabularySize,
                    const std::size_t hiddenSize)
     {
-        for (std::int64_t t = 0; t < tokenCount; ++t)
+        for (std::size_t t{}; t < tokenCount; ++t)
         {
             const auto token = tokenIds[t];
 
@@ -33,7 +33,7 @@ namespace Math
             const auto sourceOffset = tokenIndex * hiddenSize;
             const auto destinationOffset = t * hiddenSize;
 
-            for (std::size_t h = 0; h < hiddenSize; ++h)
+            for (std::size_t h{}; h < hiddenSize; ++h)
                 output[destinationOffset + h] = embeddingTable[sourceOffset + h];
         }
     }
@@ -47,7 +47,7 @@ namespace Math
 #if HAVE_AVX2_SUPPORT
             __m256 accumulator = _mm256_setzero_ps();
 
-            std::size_t column = 0;
+            std::size_t column{};
             for (; column + 8 <= columns; column += 8)
             {
                 const auto inputVec = _mm256_loadu_ps(input + column);
@@ -72,7 +72,7 @@ namespace Math
 #else
             auto sum = bias[row];
 
-            for (std::size_t column = 0; column < columns; ++column)
+            for (std::size_t column{}; column < columns; ++column)
                 sum += matrix[row * columns + column] * input[column];
 
             output[row] = sum;
@@ -88,23 +88,14 @@ namespace Math
         float meanSquare{};
         float rms{};
 
-#pragma omp parallel shared(meanSquare, rms)
-        {
-#pragma omp for reduction(+:meanSquare)
-            for (std::int64_t i = 0; i < elementCount; ++i)
-                meanSquare += x[i] * x[i];
+        for (std::int64_t i{}; i < elementCount; ++i)
+            meanSquare += x[i] * x[i];
 
-#pragma omp single
-            {
-                meanSquare /= static_cast<float>(elementCount);
+        meanSquare /= static_cast<float>(elementCount);
+        rms = std::sqrt(meanSquare + epsilon);
 
-                rms = std::sqrt(meanSquare + epsilon);
-            }
-
-#pragma omp for
-            for (std::int64_t i = 0; i < elementCount; ++i)
-                y[i] = weight[i] * (x[i] / rms);
-        }
+        for (std::int64_t i{}; i < elementCount; ++i)
+            y[i] = weight[i] * (x[i] / rms);
     }
 
     void Add(const float* a, const float* b, float* output, const std::size_t elementCount)
@@ -147,11 +138,11 @@ namespace Math
 
         const auto halfDimension = headDimension / 2;
 
-        for (std::size_t h = 0; h < headCount; ++h)
+        for (std::size_t h{}; h < headCount; ++h)
         {
             const auto headOffset = h * headDimension;
 
-            for (std::size_t p = 0; p < halfDimension; ++p)
+            for (std::size_t p{}; p < halfDimension; ++p)
             {
                 const auto exponent = static_cast<float>(2 * p) / static_cast<float>(headDimension);
                 const auto inverseFrequency = 1.0f / std::pow(theta, exponent);
@@ -180,25 +171,23 @@ namespace Math
             return;
 
         const auto groupSize = attentionHeadCount / keyValueHeadCount;
-
         const auto scale = 1.0f / std::sqrt(static_cast<float>(headDimension));
 
         std::vector<float> scores(validTokenCount);
 
-        for (std::size_t h = 0; h < attentionHeadCount; ++h)
+        for (std::size_t h{}; h < attentionHeadCount; ++h)
         {
             const auto kvHead = h / groupSize;
             const auto qOffset = h * headDimension;
-
             auto maximumScore = -std::numeric_limits<float>::infinity();
 
-            for (std::size_t t = 0; t < validTokenCount; ++t)
+            for (std::size_t t{}; t < validTokenCount; ++t)
             {
                 const auto kOffset = (t * keyValueHeadCount + kvHead) * headDimension;
 
                 float score_h_t{};
 
-                for (std::size_t d = 0; d < headDimension; ++d)
+                for (std::size_t d{}; d < headDimension; ++d)
                     score_h_t += q[qOffset + d] * kCache[kOffset + d];
 
                 score_h_t *= scale;
@@ -210,27 +199,25 @@ namespace Math
 
             float probabilitySum{};
 
-            for (std::size_t t = 0; t < validTokenCount; ++t)
+            for (std::size_t t{}; t < validTokenCount; ++t)
             {
                 scores[t] = std::exp(scores[t] - maximumScore);
 
                 probabilitySum += scores[t];
             }
 
-            const float inverseProbabilitySum = 1.0f / probabilitySum;
-
+            const auto inverseProbabilitySum = 1.0f / probabilitySum;
             const auto outputOffset = h * headDimension;
 
-            for (std::size_t d = 0; d < headDimension; ++d)
+            for (std::size_t d{}; d < headDimension; ++d)
                 output[outputOffset + d] = 0.0f;
 
-            for (std::size_t t = 0; t < validTokenCount; ++t)
+            for (std::size_t t{}; t < validTokenCount; ++t)
             {
-                const float probability_h_t = scores[t] * inverseProbabilitySum;
-
+                const auto probability_h_t = scores[t] * inverseProbabilitySum;
                 const auto vOffset = (t * keyValueHeadCount + kvHead) * headDimension;
 
-                for (std::size_t d = 0; d < headDimension; ++d)
+                for (std::size_t d{}; d < headDimension; ++d)
                     output[outputOffset + d] += probability_h_t * vCache[vOffset + d];
             }
         }
@@ -240,8 +227,7 @@ namespace Math
     {
         const auto cacheOffset = position * elementCount;
 
-        for (std::size_t i = 0; i < elementCount; ++i)
+        for (std::size_t i{}; i < elementCount; ++i)
             cache[cacheOffset + i] = source[i];
-
     }
 }

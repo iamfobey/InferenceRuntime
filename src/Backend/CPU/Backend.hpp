@@ -39,15 +39,8 @@ public:
 
     void RoPE(Tensor& source, size_t position, size_t headCount, size_t headDimension, float theta) override;
 
-    void Attention(
-        const Tensor& q,
-        const Tensor& kCache,
-        const Tensor& vCache,
-        std::size_t validTokenCount,
-        std::size_t attentionHeadCount,
-        std::size_t keyValueHeadCount,
-        Tensor& output
-    ) override;
+    void Attention(const Tensor& q, const Tensor& kCache, const Tensor& vCache, std::size_t validTokenCount,
+                   std::size_t attentionHeadCount, std::size_t keyValueHeadCount, Tensor& output) override;
 
     void CopyToCache(const Tensor& source, Tensor& cache, std::size_t position) override;
 

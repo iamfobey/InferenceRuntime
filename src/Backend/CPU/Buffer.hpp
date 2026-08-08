@@ -12,11 +12,13 @@ public:
     {
     }
 
+    [[nodiscard]]
     DeviceType Device() const noexcept override
     {
         return DeviceType::CPU;
     }
 
+    [[nodiscard]]
     std::size_t SizeBytes() const noexcept override
     {
         return m_Storage.size();
@@ -27,6 +29,7 @@ public:
         return m_Storage.data();
     }
 
+    [[nodiscard]]
     const void* Data() const noexcept override
     {
         return m_Storage.data();

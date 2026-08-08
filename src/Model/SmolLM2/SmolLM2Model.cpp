@@ -1,6 +1,5 @@
 ﻿#include "SmolLM2Model.hpp"
 
-#include <cstdint>
 #include <execution>
 #include <fstream>
 #include <iostream>
@@ -26,17 +25,15 @@ namespace
     {
         tensor = backend.CreateTensor(shape, DataType::Float32);
 
-        std::vector<std::uint16_t> rawData{};
-        rawData.resize(Utils::ElementCount(shape));
+        std::vector<std::uint16_t> rawData(Utils::ElementCount(shape));
 
-        file.seekg(8 + headerSize + startOffset);
-        file.read(reinterpret_cast<char*>(rawData.data()), endOffset - startOffset);
+        file.seekg(static_cast<std::streamoff>(8 + headerSize + startOffset));
+        file.read(reinterpret_cast<char*>(rawData.data()), static_cast<std::streamsize>(endOffset - startOffset));
 
-        std::vector<float> data{};
-        data.reserve(rawData.size());
+        std::vector<float> data(rawData.size());
 
-        for (auto rd : rawData)
-            data.emplace_back(std::bit_cast<float>(static_cast<std::uint32_t>(rd) << 16));
+        for (std::size_t i{}; i < data.size(); ++i)
+            data[i] = std::bit_cast<float>(static_cast<std::uint32_t>(rawData[i]) << 16);
 
         backend.Upload(tensor, data);
     }
@@ -50,11 +47,11 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
 
     if (std::ifstream file(path / "model.safetensors", std::ios::binary); file)
     {
-        std::uint64_t headerSize = 0;
+        std::uint64_t headerSize{};
         file.read(reinterpret_cast<char*>(&headerSize), 8);
 
         std::vector<char> json_buffer(headerSize + simdjson::SIMDJSON_PADDING);
-        file.read(json_buffer.data(), headerSize);
+        file.read(json_buffer.data(), static_cast<std::streamsize>(headerSize));
 
         simdjson::ondemand::parser parser;
         simdjson::ondemand::document doc;
@@ -67,7 +64,7 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
 
         for (auto root = doc.get_object(); auto field : root)
         {
-            std::string_view tensorName = field.unescaped_key();
+            const std::string_view tensorName = field.unescaped_key();
 
             if (tensorName == "__metadata__") continue;
 
@@ -75,19 +72,20 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
 
             simdjson::ondemand::array offsetsJson = tensorInfoJson["data_offsets"].get_array();
             auto offsetsIt = offsetsJson.begin();
-            uint64_t startOffset = (*offsetsIt).get_uint64();
-            uint64_t endOffset = (*++offsetsIt).get_uint64();
+            const std::uint64_t startOffset = (*offsetsIt).get_uint64();
+            const std::uint64_t endOffset = (*++offsetsIt).get_uint64();
 
             simdjson::ondemand::array shapeJson = tensorInfoJson["shape"].get_array();
+
             std::vector<std::size_t> shape{};
             shape.reserve(shapeJson.count_elements());
             for (auto shapeData : shapeJson)
                 shape.emplace_back(static_cast<std::size_t>(shapeData.get_uint64()));
 
             std::uint8_t currentLayer{};
-            if (auto pos2 = tensorName.find(".", 13); pos2 != std::string::npos)
+            if (auto pos2 = tensorName.find('.', 13); pos2 != std::string::npos)
             {
-                currentLayer = std::atoi(tensorName.substr(13, pos2 - 13).data());
+                currentLayer = std::atoi(tensorName.substr(13, pos2 - 13).data()); // NOLINT(*-err34-c)
             }
 
             const auto makeTensorName = [&](const char* name)
@@ -151,97 +149,38 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
             }
         }
 
-        m_Hidden =
-            backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
-
-        m_NextHidden =
-            backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
-
-        m_Normalized =
-            backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
-
-        m_Query = backend.CreateTensor(
-            {
-                Config.numAttentionHeads,
-                Config.headDimension
-            },
-            DataType::Float32
-        );
-
-        m_Key = backend.CreateTensor(
-            {
-                Config.numKeyValueHeads,
-                Config.headDimension
-            },
-            DataType::Float32
-        );
-
-        m_Value = backend.CreateTensor(
-            {
-                Config.numKeyValueHeads,
-                Config.headDimension
-            },
-            DataType::Float32
-        );
-
-        m_AttentionOutput =
-            backend.CreateTensor(
-                {
-                    Config.numAttentionHeads,
-                    Config.headDimension
-                },
-                DataType::Float32
-            );
-
-        m_AttentionProjected =
-            backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
-
-        m_Gate =
-            backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
-
-        m_Up =
-            backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
-
-        m_ActivatedGate =
-            backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
-
-        m_FeedForward =
-            backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
-
-        m_DownOutput =
-            backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
-
-        m_Logits =
-            backend.CreateTensor({Config.vocabSize}, DataType::Float32);
+        m_Hidden = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
+        m_NextHidden = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
+        m_Normalized = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
+        m_Query = backend.CreateTensor({Config.numAttentionHeads, Config.headDimension}, DataType::Float32);
+        m_Key = backend.CreateTensor({Config.numKeyValueHeads, Config.headDimension}, DataType::Float32);
+        m_Value = backend.CreateTensor({Config.numKeyValueHeads, Config.headDimension}, DataType::Float32);
+        m_AttentionOutput = backend.CreateTensor({Config.numAttentionHeads, Config.headDimension}, DataType::Float32);
+        m_AttentionProjected = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
+        m_Gate = backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
+        m_Up = backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
+        m_ActivatedGate = backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
+        m_FeedForward = backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
+        m_DownOutput = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
+        m_Logits = backend.CreateTensor({Config.vocabSize}, DataType::Float32);
 
         m_KeyCaches.resize(Config.numHiddenLayers);
         m_ValueCaches.resize(Config.numHiddenLayers);
 
-        for (std::size_t i = 0; i < Config.numHiddenLayers; ++i)
+        for (std::size_t i{}; i < Config.numHiddenLayers; ++i)
         {
-            m_KeyCaches[i] = backend.CreateTensor(
-                {
-                    Config.maxPositionEmbeddings,
-                    Config.numKeyValueHeads,
-                    Config.headDimension
-                },
-                DataType::Float32
-            );
-
-            m_ValueCaches[i] = backend.CreateTensor(
-                {
-                    Config.maxPositionEmbeddings,
-                    Config.numKeyValueHeads,
-                    Config.headDimension
-                },
-                DataType::Float32
-            );
+            m_KeyCaches[i] = backend.CreateTensor({
+                                                      Config.maxPositionEmbeddings, Config.numKeyValueHeads,
+                                                      Config.headDimension
+                                                  }, DataType::Float32);
+            m_ValueCaches[i] = backend.CreateTensor({
+                                                        Config.maxPositionEmbeddings, Config.numKeyValueHeads,
+                                                        Config.headDimension
+                                                    }, DataType::Float32);
         }
 
         if (tokenizer->Load(path / "tokenizer.json"))
-        {
             return true;
-        }
 
         return false;
     }
@@ -260,18 +199,11 @@ void SmolLM2Model::Prefill(
     std::span<const std::int32_t> tokenIds,
     IBackend& backend)
 {
-    if (tokenIds.size() >
-        Config.maxPositionEmbeddings - m_Position)
-    {
-        throw std::out_of_range(
-            "Maximum context length exceeded"
-        );
-    }
+    if (tokenIds.size() > Config.maxPositionEmbeddings - m_Position)
+        throw std::out_of_range("Maximum context length exceeded");
 
-    for (const std::int32_t tokenId : tokenIds)
-    {
+    for (const auto tokenId : tokenIds)
         DecodeStep(tokenId, backend);
-    }
 }
 
 void SmolLM2Model::DecodeStep(std::int32_t tokenId, IBackend& backend)
@@ -284,168 +216,47 @@ void SmolLM2Model::DecodeStep(std::int32_t tokenId, IBackend& backend)
 
     const std::span<const std::int32_t> tokenIds(&tokenId, 1);
 
-    backend.Embedding(
-        m_TokenEmbedding,
-        tokenIds,
-        m_Hidden
-    );
+    backend.Embedding(m_TokenEmbedding, tokenIds, m_Hidden);
 
-    for (std::size_t layerIndex = 0; layerIndex < m_Layers.size(); ++layerIndex)
+    for (std::size_t layerIndex{}; layerIndex < m_Layers.size(); ++layerIndex)
     {
-        auto& [layernorm, downProj, gateProj, upProj, postAttentionLayernorm, selfAttnK, selfAttnO, selfAttnQ,
-            selfAttnV] = m_Layers[
-            layerIndex];
+        auto& [layernorm, downProj, gateProj, upProj, postAttentionLayernorm, selfAttnK, selfAttnO, selfAttnQ,selfAttnV]
+            = m_Layers[layerIndex];
 
-        backend.RMSNorm(
-            m_Hidden,
-            layernorm,
-            Config.rmsNormEps,
-            m_Normalized
-        );
+        backend.RMSNorm(m_Hidden, layernorm, static_cast<float>(Config.rmsNormEps), m_Normalized);
+        backend.Linear(selfAttnQ, m_Normalized, nullptr, m_Query);
+        backend.Linear(selfAttnK, m_Normalized, nullptr, m_Key);
+        backend.Linear(selfAttnV, m_Normalized, nullptr, m_Value);
+        backend.RoPE(m_Query, m_Position, Config.numAttentionHeads, Config.headDimension,
+                     static_cast<float>(Config.ropeTheta));
+        backend.RoPE(m_Key, m_Position, Config.numKeyValueHeads, Config.headDimension,
+                     static_cast<float>(Config.ropeTheta));
+        backend.CopyToCache(m_Key, m_KeyCaches[layerIndex], m_Position);
+        backend.CopyToCache(m_Value, m_ValueCaches[layerIndex], m_Position);
 
-        backend.Linear(
-            selfAttnQ,
-            m_Normalized,
-            nullptr,
-            m_Query
-        );
+        const auto validTokenCount = m_Position + 1;
 
-        backend.Linear(
-            selfAttnK,
-            m_Normalized,
-            nullptr,
-            m_Key
-        );
+        backend.Attention(m_Query, m_KeyCaches[layerIndex], m_ValueCaches[layerIndex], validTokenCount,
+                          Config.numAttentionHeads, Config.numKeyValueHeads, m_AttentionOutput);
+        backend.Linear(selfAttnO, m_AttentionOutput, nullptr, m_AttentionProjected);
+        backend.Add(m_Hidden, m_AttentionProjected, m_NextHidden);
 
-        backend.Linear(
-            selfAttnV,
-            m_Normalized,
-            nullptr,
-            m_Value
-        );
+        std::swap(m_Hidden, m_NextHidden);
 
-        backend.RoPE(
-            m_Query,
-            m_Position,
-            Config.numAttentionHeads,
-            Config.headDimension,
-            Config.ropeTheta
-        );
+        backend.RMSNorm(m_Hidden, postAttentionLayernorm, static_cast<float>(Config.rmsNormEps), m_Normalized);
+        backend.Linear(gateProj, m_Normalized, nullptr, m_Gate);
+        backend.Linear(upProj, m_Normalized, nullptr, m_Up);
+        backend.SiLU(m_Gate, m_ActivatedGate);
+        backend.Multiply(m_ActivatedGate, m_Up, m_FeedForward);
+        backend.Linear(downProj, m_FeedForward, nullptr, m_DownOutput);
+        backend.Add(m_Hidden, m_DownOutput, m_NextHidden);
 
-        backend.RoPE(
-            m_Key,
-            m_Position,
-            Config.numKeyValueHeads,
-            Config.headDimension,
-            Config.ropeTheta
-        );
-
-        backend.CopyToCache(
-            m_Key,
-            m_KeyCaches[layerIndex],
-            m_Position
-        );
-
-        backend.CopyToCache(
-            m_Value,
-            m_ValueCaches[layerIndex],
-            m_Position
-        );
-
-        const std::size_t validTokenCount = m_Position + 1;
-
-        backend.Attention(
-            m_Query,
-            m_KeyCaches[layerIndex],
-            m_ValueCaches[layerIndex],
-            validTokenCount,
-            Config.numAttentionHeads,
-            Config.numKeyValueHeads,
-            m_AttentionOutput
-        );
-
-        backend.Linear(
-            selfAttnO,
-            m_AttentionOutput,
-            nullptr,
-            m_AttentionProjected
-        );
-
-        backend.Add(
-            m_Hidden,
-            m_AttentionProjected,
-            m_NextHidden
-        );
-
-        std::swap(
-            m_Hidden,
-            m_NextHidden
-        );
-
-        backend.RMSNorm(
-            m_Hidden,
-            postAttentionLayernorm,
-            Config.rmsNormEps,
-            m_Normalized
-        );
-
-        backend.Linear(
-            gateProj,
-            m_Normalized,
-            nullptr,
-            m_Gate
-        );
-
-        backend.Linear(
-            upProj,
-            m_Normalized,
-            nullptr,
-            m_Up
-        );
-
-        backend.SiLU(
-            m_Gate,
-            m_ActivatedGate
-        );
-
-        backend.Multiply(
-            m_ActivatedGate,
-            m_Up,
-            m_FeedForward
-        );
-
-        backend.Linear(
-            downProj,
-            m_FeedForward,
-            nullptr,
-            m_DownOutput
-        );
-
-        backend.Add(
-            m_Hidden,
-            m_DownOutput,
-            m_NextHidden
-        );
-
-        std::swap(
-            m_Hidden,
-            m_NextHidden
-        );
+        std::swap(m_Hidden, m_NextHidden);
     }
 
-    backend.RMSNorm(
-        m_Hidden,
-        m_FinalNorm,
-        Config.rmsNormEps,
-        m_Normalized
-    );
+    backend.RMSNorm(m_Hidden, m_FinalNorm, static_cast<float>(Config.rmsNormEps), m_Normalized);
 
-    backend.Linear(
-        m_TokenEmbedding,
-        m_Normalized,
-        nullptr,
-        m_Logits
-    );
+    backend.Linear(m_TokenEmbedding, m_Normalized, nullptr, m_Logits);
 
     ++m_Position;
 }

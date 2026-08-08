@@ -15,7 +15,7 @@ void Tensor::Validate(const DeviceType requiredDeviceType, const DataType requir
 
     if (buffer->Device() != requiredDeviceType)
     {
-        throw std::invalid_argument(tensorName + " is not a CPU tensor");
+        throw std::invalid_argument(tensorName + " is not a required device type tensor");
     }
 
     if (dataType != requiredDataType)

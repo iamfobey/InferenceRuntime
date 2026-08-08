@@ -25,16 +25,9 @@ TEST(LinearTests, CalculatesExpectedValues)
         -1.0f
     };
 
-    std::array < float, J > y{};
+    std::array<float, J> y{};
 
-    Math::Linear(
-        W.data(),
-        x.data(),
-        b.data(),
-        y.data(),
-        J,
-        K
-    );
+    Math::Linear(W.data(), x.data(), b.data(), y.data(), J, K);
 
     EXPECT_NEAR(y[0], 141.0f, 1e-5f);
     EXPECT_NEAR(y[1], 319.0f, 1e-5f);

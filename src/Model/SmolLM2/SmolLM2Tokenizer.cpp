@@ -47,9 +47,9 @@ namespace
             std::array<std::string, 256> result{};
             char32_t extraCodePoint = 256;
 
-            for (std::uint16_t byte = 0; byte < 256; ++byte)
+            for (std::uint16_t byte{}; byte < 256; ++byte)
             {
-                const char32_t codePoint = IsDirectByte(byte) ? static_cast<char32_t>(byte) : extraCodePoint++;
+                const auto codePoint = IsDirectByte(byte) ? static_cast<char32_t>(byte) : extraCodePoint++;
                 AppendUtf8(result[byte], codePoint);
             }
 
@@ -66,9 +66,9 @@ namespace
             std::unordered_map<char32_t, std::uint8_t> result{};
             char32_t extraCodePoint = 256;
 
-            for (std::uint16_t byte = 0; byte < 256; ++byte)
+            for (std::uint16_t byte{}; byte < 256; ++byte)
             {
-                const char32_t codePoint = IsDirectByte(byte) ? static_cast<char32_t>(byte) : extraCodePoint++;
+                const auto codePoint = IsDirectByte(byte) ? static_cast<char32_t>(byte) : extraCodePoint++;
                 result.emplace(codePoint, static_cast<std::uint8_t>(byte));
             }
 
@@ -144,7 +144,7 @@ namespace
     {
         static constexpr std::array<std::string_view, 7> contractions{"'s", "'t", "'re", "'ve", "'m", "'ll", "'d"};
 
-        std::size_t position = 0;
+        std::size_t position{};
 
         while (position < text.size())
         {
@@ -169,7 +169,7 @@ namespace
             if (current == ' ' && position + 1 < text.size() &&
                 IsLetter(static_cast<unsigned char>(text[position + 1])))
             {
-                std::size_t end = position + 2;
+                auto end = position + 2;
                 while (end < text.size() && IsLetter(static_cast<unsigned char>(text[end])))
                     ++end;
 
@@ -180,7 +180,7 @@ namespace
 
             if (IsLetter(current))
             {
-                std::size_t end = position + 1;
+                auto end = position + 1;
                 while (end < text.size() && IsLetter(static_cast<unsigned char>(text[end])))
                     ++end;
 
@@ -198,7 +198,7 @@ namespace
 
             if (current == ' ' && position + 1 < text.size() && IsOther(static_cast<unsigned char>(text[position + 1])))
             {
-                std::size_t end = position + 2;
+                auto end = position + 2;
                 while (end < text.size() && IsOther(static_cast<unsigned char>(text[end])))
                     ++end;
 
@@ -209,7 +209,7 @@ namespace
 
             if (IsOther(current))
             {
-                std::size_t end = position + 1;
+                auto end = position + 1;
                 while (end < text.size() && IsOther(static_cast<unsigned char>(text[end])))
                     ++end;
 
@@ -218,7 +218,7 @@ namespace
                 continue;
             }
 
-            std::size_t end = position + 1;
+            auto end = position + 1;
             while (end < text.size() && IsWhitespace(static_cast<unsigned char>(text[end])))
                 ++end;
 
@@ -238,9 +238,9 @@ namespace
     std::vector<std::string_view> PreTokenize(std::string_view text)
     {
         std::vector<std::string_view> result{};
-        std::size_t begin = 0;
+        std::size_t begin{};
 
-        for (std::size_t position = 0; position < text.size(); ++position)
+        for (std::size_t position{}; position < text.size(); ++position)
         {
             if (!IsDigit(static_cast<unsigned char>(text[position])))
                 continue;
@@ -290,7 +290,7 @@ bool SmolLM2Tokenizer::Load(const std::filesystem::path& path)
         m_Tokens.emplace(std::string(token), static_cast<std::size_t>(tokenId));
     }
 
-    std::size_t rank = 0;
+    std::size_t rank{};
 
     for (auto mergeValue : model["merges"].get_array())
     {
@@ -315,20 +315,19 @@ std::vector<std::int32_t> SmolLM2Tokenizer::Encode(std::string_view text) const
         const std::vector<std::string_view> pieces = PreTokenize(normalText);
         const auto& byteEncoder = ByteEncoder();
 
-        for (const std::string_view piece : pieces)
+        for (const auto piece : pieces)
         {
-            std::vector<std::string> symbols{};
-            symbols.reserve(piece.size());
+            std::vector<std::string> symbols(piece.size());
 
-            for (const unsigned char byte : piece)
-                symbols.emplace_back(byteEncoder[byte]);
+            for (std::size_t i{}; i < symbols.size(); ++i)
+                symbols[i] = byteEncoder[piece[i]];
 
             while (symbols.size() > 1)
             {
-                std::size_t bestRank = std::numeric_limits<std::size_t>::max();
-                std::size_t bestPosition = std::numeric_limits<std::size_t>::max();
+                auto bestRank = std::numeric_limits<std::size_t>::max();
+                auto bestPosition = std::numeric_limits<std::size_t>::max();
 
-                for (std::size_t position = 0; position + 1 < symbols.size(); ++position)
+                for (std::size_t position{}; position + 1 < symbols.size(); ++position)
                 {
                     const auto merge = m_MergeRanks.find(MergeKey(symbols[position], symbols[position + 1]));
 
@@ -342,8 +341,8 @@ std::vector<std::int32_t> SmolLM2Tokenizer::Encode(std::string_view text) const
                 if (bestPosition == std::numeric_limits<std::size_t>::max())
                     break;
 
-                const std::string left = symbols[bestPosition];
-                const std::string right = symbols[bestPosition + 1];
+                const auto& left = symbols[bestPosition];
+                const auto& right = symbols[bestPosition + 1];
 
                 std::vector<std::string> merged{};
                 merged.reserve(symbols.size());
@@ -365,9 +364,9 @@ std::vector<std::int32_t> SmolLM2Tokenizer::Encode(std::string_view text) const
                 symbols = std::move(merged);
             }
 
-            for (const std::string& symbol : symbols)
+            for (const auto& symbol : symbols)
             {
-                const auto token = m_Tokens.find(symbol);
+                const auto& token = m_Tokens.find(symbol);
 
                 if (token == m_Tokens.end())
                     throw std::runtime_error("BPE token not found in vocabulary");
@@ -377,12 +376,12 @@ std::vector<std::int32_t> SmolLM2Tokenizer::Encode(std::string_view text) const
         }
     };
 
-    std::size_t normalTextBegin = 0;
-    std::size_t position = 0;
+    std::size_t normalTextBegin{};
+    std::size_t position{};
 
     while (position < text.size())
     {
-        const std::pair<const std::string, std::size_t>* matchedToken = nullptr;
+        const std::pair<const std::string, std::size_t>* matchedToken{};
 
         for (const auto& token : m_AddedTokens)
         {
@@ -415,7 +414,7 @@ std::string SmolLM2Tokenizer::Decode(std::span<const std::int32_t> tokenIds) con
 {
     std::string byteLevelText{};
 
-    for (const std::int32_t tokenId : tokenIds)
+    for (const auto tokenId : tokenIds)
     {
         bool found = false;
 
@@ -435,11 +434,11 @@ std::string SmolLM2Tokenizer::Decode(std::span<const std::int32_t> tokenIds) con
 
     std::string result{};
     const auto& byteDecoder = ByteDecoder();
-    std::size_t position = 0;
+    std::size_t position{};
 
     while (position < byteLevelText.size())
     {
-        const char32_t codePoint = ReadUtf8CodePoint(byteLevelText, position);
+        const auto codePoint = ReadUtf8CodePoint(byteLevelText, position);
         const auto byte = byteDecoder.find(codePoint);
 
         if (byte == byteDecoder.end())

@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.25.1)
+cmake_minimum_required(VERSION 3.25.1)
 
 project(InferenceRuntime LANGUAGES CXX)
 
@@ -48,12 +48,15 @@ if (ENABLE_AVX2)
         endif ()
     else ()
         check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
+        check_cxx_compiler_flag("-mfma" COMPILER_SUPPORTS_FMA)
+        check_cxx_compiler_flag("-mf16c" COMPILER_SUPPORTS_F16C)
 
-        if (COMPILER_SUPPORTS_AVX2)
-            set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/Math/Math.cpp" PROPERTIES COMPILE_OPTIONS "-mavx2")
+        if (COMPILER_SUPPORTS_AVX2 AND COMPILER_SUPPORTS_FMA AND COMPILER_SUPPORTS_F16C)
+            set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/Math/Math.cpp"
+                    PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma;-mf16c")
             set(HAVE_AVX2_SUPPORT 1)
         else ()
-            message(WARNING "AVX2 requested, but compiler does not support -mavx2")
+            message(WARNING "AVX2/FMA/F16C requested, but compiler does not support all required flags")
         endif ()
     endif ()
 endif ()
@@ -69,3 +72,4 @@ target_link_libraries(InferenceRuntime PRIVATE runtime_core)
 
 message(STATUS "OpenMP: ${HAVE_OPENMP_SUPPORT}")
 message(STATUS "AVX2: ${HAVE_AVX2_SUPPORT}")
+

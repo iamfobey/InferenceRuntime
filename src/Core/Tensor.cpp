@@ -1,5 +1,6 @@
-﻿#include "Tensor.hpp"
+#include "Tensor.hpp"
 
+#include <cstdint>
 #include <iostream>
 #include <ostream>
 #include <stdexcept>
@@ -9,29 +10,21 @@
 void Tensor::Validate(const DeviceType requiredDeviceType, const DataType requiredDataType) const
 {
     if (!buffer)
-    {
         throw std::invalid_argument(tensorName + " has no buffer");
-    }
 
     if (buffer->Device() != requiredDeviceType)
-    {
         throw std::invalid_argument(tensorName + " is not a required device type tensor");
-    }
 
     if (dataType != requiredDataType)
-    {
-        throw std::invalid_argument(tensorName + " must use Float32");
-    }
+        throw std::invalid_argument(tensorName + " has an unexpected data type");
 
     if (!IsContiguous())
-    {
         throw std::invalid_argument(tensorName + " must be contiguous");
-    }
 
-    if (byteOffset % alignof(float) != 0)
-    {
+    const auto alignment = dataType == DataType::Float16 ? alignof(std::uint16_t) : alignof(float);
+
+    if (byteOffset % alignment != 0)
         throw std::invalid_argument(tensorName + " has an invalid byte offset");
-    }
 
     const std::size_t requiredBytes = Math::CheckedMultiply(ElementCount(), Utils::DataTypeSize(dataType));
 
@@ -44,7 +37,18 @@ void Tensor::Validate(const DeviceType requiredDeviceType, const DataType requir
 
 float* Tensor::FloatData() const
 {
+    if (dataType != DataType::Float32)
+        throw std::logic_error(tensorName + " is not Float32");
+
     return reinterpret_cast<float*>(static_cast<std::byte*>(buffer->Data()) + byteOffset);
+}
+
+std::uint16_t* Tensor::Float16Data() const
+{
+    if (dataType != DataType::Float16)
+        throw std::logic_error(tensorName + " is not Float16");
+
+    return reinterpret_cast<std::uint16_t*>(static_cast<std::byte*>(buffer->Data()) + byteOffset);
 }
 
 DeviceType Tensor::Device() const noexcept

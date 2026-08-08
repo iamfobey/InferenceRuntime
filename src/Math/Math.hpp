@@ -1,16 +1,27 @@
-﻿#pragma once
+#pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace Math
 {
-    void Embedding(const float* embeddingTable, const std::int32_t* tokenIds, float* output, std::size_t tokenCount,
-                   std::size_t vocabularySize, std::size_t hiddenSize);
+    [[nodiscard]]
+    std::uint16_t Float32ToFloat16(float value) noexcept;
 
-    void Linear(const float* matrix, const float* input, const float* bias, float* output, std::size_t rows,
+    [[nodiscard]]
+    float Float16ToFloat32(std::uint16_t value) noexcept;
+
+    void ConvertFloat32ToFloat16(const float* source, std::uint16_t* destination, std::size_t elementCount);
+
+    void ConvertFloat16ToFloat32(const std::uint16_t* source, float* destination, std::size_t elementCount);
+
+    void Embedding(const std::uint16_t* embeddingTable, const std::int32_t* tokenIds, float* output,
+                   std::size_t tokenCount, std::size_t vocabularySize, std::size_t hiddenSize);
+
+    void Linear(const std::uint16_t* matrix, const float* input, const float* bias, float* output, std::size_t rows,
                 std::size_t columns);
 
-    void RMSNorm(const float* x, const float* weight, float epsilon, float* y, std::size_t elementCount);
+    void RMSNorm(const float* x, const std::uint16_t* weight, float epsilon, float* y, std::size_t elementCount);
 
     void Add(const float* a, const float* b, float* output, std::size_t elementCount);
 

@@ -1,4 +1,4 @@
-﻿#include "Utils.hpp"
+#include "Utils.hpp"
 
 #include <cstdint>
 #include <stdexcept>
@@ -193,6 +193,8 @@ namespace Utils
     {
         switch (dataType)
         {
+        case DataType::Float16:
+            return sizeof(std::uint16_t);
         case DataType::Float32:
             return sizeof(float);
         }
@@ -230,3 +232,5 @@ namespace Utils
         return count;
     }
 }
+
+

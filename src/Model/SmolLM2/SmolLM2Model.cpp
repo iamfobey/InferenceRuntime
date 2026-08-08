@@ -1,5 +1,6 @@
-﻿#include "SmolLM2Model.hpp"
+#include "SmolLM2Model.hpp"
 
+#include <bit>
 #include <execution>
 #include <fstream>
 #include <iostream>
@@ -23,7 +24,7 @@ namespace
                                std::uint64_t startOffset, std::uint64_t endOffset,
                                const std::vector<std::size_t>& shape)
     {
-        tensor = backend.CreateTensor(shape, DataType::Float32);
+        tensor = backend.CreateTensor(shape, DataType::Float16);
 
         std::vector<std::uint16_t> rawData(Utils::ElementCount(shape));
 
@@ -265,3 +266,5 @@ const Tensor& SmolLM2Model::Logits() const noexcept
 {
     return m_Logits;
 }
+
+

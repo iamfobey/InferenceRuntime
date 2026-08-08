@@ -83,14 +83,30 @@ std::string Runtime::Generate(const std::string_view prompt, const std::size_t m
         return {};
     }
 
-    m_Model->Reset();
+    constexpr std::size_t tot = 5;
+    std::chrono::microseconds total{};
 
-    Prefill(promptTokens);
+    for (std::size_t j{}; j < tot; ++j)
+    {
+        m_Model->Reset();
+        Prefill(promptTokens);
 
-    std::vector<std::int32_t> generatedTokens;
-    generatedTokens.reserve(maximumNewTokens);
+        std::int32_t currentToken = SampleGreedy();
 
-    std::int32_t currentToken = SampleGreedy();
+        const auto start = std::chrono::steady_clock::now();
+
+        for (std::size_t i{}; i < maximumNewTokens; ++i)
+            currentToken = GenerateNextToken(currentToken);
+
+        const auto end = std::chrono::steady_clock::now();
+
+        total += std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    }
+
+    const double averageUs = static_cast<double>(total.count()) / tot;
+
+    std::cout << "Per token: " << averageUs / maximumNewTokens << " us\n";
+    std::cout << "Tokens/s: " << maximumNewTokens * 1'000'000.0 / averageUs << '\n';
 
     // for (std::size_t i = 0; i < maximumNewTokens; ++i)
     // {
@@ -103,20 +119,7 @@ std::string Runtime::Generate(const std::string_view prompt, const std::size_t m
     //     }
     // }
 
-    auto start = std::chrono::steady_clock::now();
-
-    for (std::size_t i = 0; i < maximumNewTokens; ++i)
-        currentToken = GenerateNextToken(currentToken);
-
-    auto end = std::chrono::steady_clock::now();
-
-    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-
-    std::cout << "Total: " << elapsed.count() << " us\n";
-    std::cout << "Per token: " << static_cast<double>(elapsed.count()) / maximumNewTokens << " us\n";
-    std::cout << "Tokens/s: " << maximumNewTokens * 1'000'000.0 / elapsed.count() << '\n';
-
-    return Decode(generatedTokens);
+    return Decode({});
 }
 
 std::string_view Runtime::ModelArchitecture() const noexcept

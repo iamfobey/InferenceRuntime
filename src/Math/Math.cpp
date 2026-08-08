@@ -1,4 +1,5 @@
-﻿#include <algorithm>
+#include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -13,10 +14,145 @@
 
 namespace Math
 {
-    void Embedding(const float* embeddingTable,
-                   const std::int32_t* tokenIds, float* output, const std::size_t tokenCount,
-                   const std::size_t vocabularySize,
-                   const std::size_t hiddenSize)
+    std::uint16_t Float32ToFloat16(const float value) noexcept
+    {
+        const std::uint32_t bits = std::bit_cast<std::uint32_t>(value); // NOLINT(*-use-auto)
+        const std::uint32_t sign = (bits >> 16) & 0x8000u;
+        const std::uint32_t exponent = (bits >> 23) & 0xFFu;
+        std::uint32_t mantissa = bits & 0x7FFFFFu;
+
+        if (exponent == 0xFFu)
+        {
+            if (mantissa == 0)
+                return static_cast<std::uint16_t>(sign | 0x7C00u);
+
+            return static_cast<std::uint16_t>(sign | 0x7E00u);
+        }
+
+        auto halfExponent = static_cast<std::int32_t>(exponent) - 127 + 15;
+
+        if (halfExponent >= 31)
+            return static_cast<std::uint16_t>(sign | 0x7C00u);
+
+        if (halfExponent <= 0)
+        {
+            if (halfExponent < -10)
+                return static_cast<std::uint16_t>(sign);
+
+            mantissa |= 0x800000u;
+
+            const auto shift = static_cast<std::uint32_t>(14 - halfExponent);
+            std::uint32_t halfMantissa = mantissa >> shift;
+            const std::uint32_t remainderMask = (1u << shift) - 1u;
+            const std::uint32_t remainder = mantissa & remainderMask;
+            const std::uint32_t halfway = 1u << (shift - 1u);
+
+            if (remainder > halfway || (remainder == halfway && (halfMantissa & 1u) != 0))
+                ++halfMantissa;
+
+            return static_cast<std::uint16_t>(sign | halfMantissa);
+        }
+
+        std::uint32_t halfMantissa = mantissa >> 13;
+        const std::uint32_t remainder = mantissa & 0x1FFFu;
+
+        if (remainder > 0x1000u || (remainder == 0x1000u && (halfMantissa & 1u) != 0))
+        {
+            ++halfMantissa;
+
+            if (halfMantissa == 0x400u)
+            {
+                halfMantissa = 0;
+                ++halfExponent;
+
+                if (halfExponent >= 31)
+                    return static_cast<std::uint16_t>(sign | 0x7C00u);
+            }
+        }
+
+        return static_cast<std::uint16_t>(sign | (static_cast<std::uint32_t>(halfExponent) << 10) | halfMantissa);
+    }
+
+    float Float16ToFloat32(const std::uint16_t value) noexcept
+    {
+        const std::uint32_t sign = (value & 0x8000u) << 16;
+        const std::uint32_t exponent = (value >> 10) & 0x1Fu;
+        std::uint32_t mantissa = value & 0x03FFu;
+        std::uint32_t bits{};
+
+        if (exponent == 0)
+        {
+            if (mantissa == 0)
+            {
+                bits = sign;
+            }
+            else
+            {
+                std::int32_t normalizedExponent = -14;
+
+                while ((mantissa & 0x0400u) == 0)
+                {
+                    mantissa <<= 1;
+                    --normalizedExponent;
+                }
+
+                mantissa &= 0x03FFu;
+                const auto floatExponent = static_cast<std::uint32_t>(normalizedExponent + 127);
+                bits = sign | (floatExponent << 23) | (mantissa << 13);
+            }
+        }
+        else if (exponent == 0x1Fu)
+        {
+            bits = sign | 0x7F800000u | (mantissa << 13);
+
+            if (mantissa != 0)
+                bits |= 0x00400000u;
+        }
+        else
+        {
+            const std::uint32_t floatExponent = exponent + (127u - 15u);
+            bits = sign | (floatExponent << 23) | (mantissa << 13);
+        }
+
+        return std::bit_cast<float>(bits);
+    }
+
+    void ConvertFloat32ToFloat16(const float* source, std::uint16_t* destination, const std::size_t elementCount)
+    {
+        std::size_t i{};
+
+#if HAVE_AVX2_SUPPORT
+        for (; i + 8 <= elementCount; i += 8)
+        {
+            const __m256 values = _mm256_loadu_ps(source + i);
+            const __m128i halfValues = _mm256_cvtps_ph(values, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(destination + i), halfValues);
+        }
+#endif
+
+        for (; i < elementCount; ++i)
+            destination[i] = Float32ToFloat16(source[i]);
+    }
+
+    void ConvertFloat16ToFloat32(const std::uint16_t* source, float* destination, const std::size_t elementCount)
+    {
+        std::size_t i{};
+
+#if HAVE_AVX2_SUPPORT
+        for (; i + 8 <= elementCount; i += 8)
+        {
+            const __m128i halfValues = _mm_loadu_si128(reinterpret_cast<const __m128i*>(source + i));
+            const __m256 values = _mm256_cvtph_ps(halfValues);
+            _mm256_storeu_ps(destination + i, values);
+        }
+#endif
+
+        for (; i < elementCount; ++i)
+            destination[i] = Float16ToFloat32(source[i]);
+    }
+
+    void Embedding(const std::uint16_t* embeddingTable, const std::int32_t* tokenIds, float* output,
+                   const std::size_t tokenCount, const std::size_t vocabularySize, const std::size_t hiddenSize)
     {
         for (std::size_t t{}; t < tokenCount; ++t)
         {
@@ -33,17 +169,18 @@ namespace Math
             const auto sourceOffset = tokenIndex * hiddenSize;
             const auto destinationOffset = t * hiddenSize;
 
-            for (std::size_t h{}; h < hiddenSize; ++h)
-                output[destinationOffset + h] = embeddingTable[sourceOffset + h];
+            ConvertFloat16ToFloat32(embeddingTable + sourceOffset, output + destinationOffset, hiddenSize);
         }
     }
 
-    void Linear(const float* matrix, const float* input, const float* bias, float* output, const std::size_t rows,
-                const std::size_t columns)
+    void Linear(const std::uint16_t* matrix, const float* input, const float* bias, float* output,
+                const std::size_t rows, const std::size_t columns)
     {
-#pragma omp parallel for
+#pragma omp parallel for schedule(static)
         for (std::int64_t row = 0; row < static_cast<std::int64_t>(rows); ++row)
         {
+            const auto* matrixRow = matrix + static_cast<std::size_t>(row) * columns;
+
 #if HAVE_AVX2_SUPPORT
             __m256 accumulator = _mm256_setzero_ps();
 
@@ -51,10 +188,11 @@ namespace Math
             for (; column + 8 <= columns; column += 8)
             {
                 const auto inputVec = _mm256_loadu_ps(input + column);
-                const auto matrixVec = _mm256_loadu_ps(matrix + row * columns + column);
-                const auto product = _mm256_mul_ps(matrixVec, inputVec);
+                const auto matrixHalf = _mm_loadu_si128(
+                    reinterpret_cast<const __m128i*>(matrixRow + column));
+                const auto matrixVec = _mm256_cvtph_ps(matrixHalf);
 
-                accumulator = _mm256_add_ps(accumulator, product);
+                accumulator = _mm256_fmadd_ps(matrixVec, inputVec, accumulator);
             }
 
             alignas(32) float values[8];
@@ -66,49 +204,65 @@ namespace Math
                 sum += value;
 
             for (; column < columns; ++column)
-                sum += matrix[row * columns + column] * input[column];
+                sum += Float16ToFloat32(matrixRow[column]) * input[column];
 
             output[row] = sum;
 #else
             auto sum = bias[row];
 
             for (std::size_t column{}; column < columns; ++column)
-                sum += matrix[row * columns + column] * input[column];
+                sum += Float16ToFloat32(matrixRow[column]) * input[column];
 
             output[row] = sum;
 #endif
         }
     }
 
-    void RMSNorm(const float* x, const float* weight, const float epsilon, float* y, const std::size_t elementCount)
+    void RMSNorm(const float* x, const std::uint16_t* weight, const float epsilon, float* y,
+                 const std::size_t elementCount)
     {
         if (elementCount == 0)
             return;
 
         float meanSquare{};
-        float rms{};
 
-        for (std::int64_t i{}; i < elementCount; ++i)
+        for (std::size_t i{}; i < elementCount; ++i)
             meanSquare += x[i] * x[i];
 
         meanSquare /= static_cast<float>(elementCount);
-        rms = std::sqrt(meanSquare + epsilon);
+        const float inverseRms = 1.0f / std::sqrt(meanSquare + epsilon);
 
-        for (std::int64_t i{}; i < elementCount; ++i)
-            y[i] = weight[i] * (x[i] / rms);
+        std::size_t i{};
+
+#if HAVE_AVX2_SUPPORT
+        const __m256 inverseRmsVec = _mm256_set1_ps(inverseRms);
+
+        for (; i + 8 <= elementCount; i += 8)
+        {
+            const __m256 xVec = _mm256_loadu_ps(x + i);
+            const __m128i weightHalf = _mm_loadu_si128(reinterpret_cast<const __m128i*>(weight + i));
+            const __m256 weightVec = _mm256_cvtph_ps(weightHalf);
+            const __m256 normalized = _mm256_mul_ps(xVec, inverseRmsVec);
+            const __m256 result = _mm256_mul_ps(weightVec, normalized);
+            _mm256_storeu_ps(y + i, result);
+        }
+#endif
+
+        for (; i < elementCount; ++i)
+            y[i] = Float16ToFloat32(weight[i]) * (x[i] * inverseRms);
     }
 
     void Add(const float* a, const float* b, float* output, const std::size_t elementCount)
     {
 #pragma omp parallel for
-        for (std::int64_t i = 0; i < elementCount; ++i)
+        for (std::int64_t i = 0; i < static_cast<std::int64_t>(elementCount); ++i)
             output[i] = a[i] + b[i];
     }
 
     void Multiply(const float* a, const float* b, float* output, const std::size_t elementCount)
     {
 #pragma omp parallel for
-        for (std::int64_t i = 0; i < elementCount; ++i)
+        for (std::int64_t i = 0; i < static_cast<std::int64_t>(elementCount); ++i)
             output[i] = a[i] * b[i];
     }
 
@@ -123,15 +277,15 @@ namespace Math
     void SiLU(const float* x, float* output, const std::size_t elementCount)
     {
 #pragma omp parallel for
-        for (std::int64_t i = 0; i < elementCount; ++i)
+        for (std::int64_t i = 0; i < static_cast<std::int64_t>(elementCount); ++i)
         {
             const auto x_i = x[i];
             output[i] = x_i / (1.0f + std::exp(-x_i));
         }
     }
 
-    void RoPE(float* source, const std::size_t position, const std::size_t headCount, const std::size_t headDimension,
-              const float theta)
+    void RoPE(float* source, const std::size_t position, const std::size_t headCount,
+              const std::size_t headDimension, const float theta)
     {
         if (headDimension == 0 || headDimension % 2 != 0)
             return;

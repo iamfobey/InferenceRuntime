@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <cstdint>
 
@@ -10,5 +10,8 @@ enum class DeviceType : std::uint8_t
 
 enum class DataType : std::uint8_t
 {
+    Float16,
     Float32
 };
+
+

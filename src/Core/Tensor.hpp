@@ -1,8 +1,9 @@
-﻿#pragma once
+#pragma once
 
 #include "Enums.hpp"
 #include "IBuffer.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -29,6 +30,9 @@ struct Tensor
 
     [[nodiscard]]
     float* FloatData() const;
+
+    [[nodiscard]]
+    std::uint16_t* Float16Data() const;
 
     [[nodiscard]]
     DeviceType Device() const noexcept;

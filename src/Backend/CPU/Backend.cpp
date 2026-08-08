@@ -1,4 +1,4 @@
-﻿#include "Backend.hpp"
+#include "Backend.hpp"
 
 #include <cstring>
 #include <memory>
@@ -44,7 +44,7 @@ Tensor CpuBackend::CreateTensor(std::vector<std::size_t> shape, const DataType d
 
 void CpuBackend::Upload(Tensor& destination, const std::span<const float> source)
 {
-    destination.Validate();
+    destination.Validate(DeviceType::CPU, destination.dataType);
 
     if (destination.ElementCount() != source.size())
         throw std::invalid_argument("Upload source size does not match destination tensor");
@@ -52,12 +52,20 @@ void CpuBackend::Upload(Tensor& destination, const std::span<const float> source
     if (source.empty())
         return;
 
-    std::memcpy(destination.FloatData(), source.data(), source.size_bytes());
+    switch (destination.dataType)
+    {
+    case DataType::Float16:
+        Math::ConvertFloat32ToFloat16(source.data(), destination.Float16Data(), source.size());
+        break;
+    case DataType::Float32:
+        std::memcpy(destination.FloatData(), source.data(), source.size_bytes());
+        break;
+    }
 }
 
 void CpuBackend::Download(const Tensor& source, const std::span<float> destination)
 {
-    source.Validate();
+    source.Validate(DeviceType::CPU, source.dataType);
 
     if (source.ElementCount() != destination.size())
         throw std::invalid_argument("Download destination size does not match source tensor");
@@ -65,13 +73,21 @@ void CpuBackend::Download(const Tensor& source, const std::span<float> destinati
     if (destination.empty())
         return;
 
-    std::memcpy(destination.data(), source.FloatData(), destination.size_bytes());
+    switch (source.dataType)
+    {
+    case DataType::Float16:
+        Math::ConvertFloat16ToFloat32(source.Float16Data(), destination.data(), destination.size());
+        break;
+    case DataType::Float32:
+        std::memcpy(destination.data(), source.FloatData(), destination.size_bytes());
+        break;
+    }
 }
 
 void CpuBackend::Embedding(const Tensor& embeddingTable, const std::span<const std::int32_t> tokenIds, Tensor& output)
 {
-    embeddingTable.Validate();
-    output.Validate();
+    embeddingTable.Validate(DeviceType::CPU, DataType::Float16);
+    output.Validate(DeviceType::CPU, DataType::Float32);
 
     if (embeddingTable.shape.size() != 2)
         throw std::invalid_argument("Embedding table must have shape [vocabularySize, hiddenSize]");
@@ -95,15 +111,15 @@ void CpuBackend::Embedding(const Tensor& embeddingTable, const std::span<const s
             throw std::invalid_argument("Multi-token embedding output must have shape [tokenCount, hiddenSize]");
     }
 
-    Math::Embedding(embeddingTable.FloatData(), tokenIds.data(), output.FloatData(), tokenCount, vocabularySize,
+    Math::Embedding(embeddingTable.Float16Data(), tokenIds.data(), output.FloatData(), tokenCount, vocabularySize,
                     hiddenSize);
 }
 
 void CpuBackend::Linear(const Tensor& W, const Tensor& x, const Tensor* b, Tensor& y)
 {
-    W.Validate();
-    x.Validate();
-    y.Validate();
+    W.Validate(DeviceType::CPU, DataType::Float16);
+    x.Validate(DeviceType::CPU, DataType::Float32);
+    y.Validate(DeviceType::CPU, DataType::Float32);
 
     if (W.shape.size() != 2)
         throw std::invalid_argument("W must have shape [matRows, matColumns]");
@@ -122,7 +138,7 @@ void CpuBackend::Linear(const Tensor& W, const Tensor& x, const Tensor* b, Tenso
 
     if (b != nullptr)
     {
-        b->Validate();
+        b->Validate(DeviceType::CPU, DataType::Float32);
 
         if (b->ElementCount() != matRows)
             throw std::invalid_argument("b element count must equal W matRows");
@@ -135,30 +151,28 @@ void CpuBackend::Linear(const Tensor& W, const Tensor& x, const Tensor* b, Tenso
         offsetPointer = zeroOffset.data();
     }
 
-    Math::Linear(W.FloatData(), x.FloatData(), offsetPointer, y.FloatData(), matRows, matColumns);
+    Math::Linear(W.Float16Data(), x.FloatData(), offsetPointer, y.FloatData(), matRows, matColumns);
 }
 
 void CpuBackend::RMSNorm(const Tensor& x, const Tensor& weight, const float epsilon, Tensor& y)
 {
-    x.Validate();
-    weight.Validate();
-    y.Validate();
+    x.Validate(DeviceType::CPU, DataType::Float32);
+    weight.Validate(DeviceType::CPU, DataType::Float16);
+    y.Validate(DeviceType::CPU, DataType::Float32);
 
     Utils::RequireSameShape(x, weight, "x and weight must have equal shapes");
-
     Utils::RequireSameShape(x, y, "x and y must have equal shapes");
 
-    Math::RMSNorm(x.FloatData(), weight.FloatData(), epsilon, y.FloatData(), x.ElementCount());
+    Math::RMSNorm(x.FloatData(), weight.Float16Data(), epsilon, y.FloatData(), x.ElementCount());
 }
 
 void CpuBackend::Add(const Tensor& a, const Tensor& b, Tensor& output)
 {
-    a.Validate();
-    b.Validate();
-    output.Validate();
+    a.Validate(DeviceType::CPU, DataType::Float32);
+    b.Validate(DeviceType::CPU, DataType::Float32);
+    output.Validate(DeviceType::CPU, DataType::Float32);
 
     Utils::RequireSameShape(a, b, "a and b must have equal shapes");
-
     Utils::RequireSameShape(a, output, "a and output must have equal shapes");
 
     Math::Add(a.FloatData(), b.FloatData(), output.FloatData(), a.ElementCount());
@@ -166,12 +180,11 @@ void CpuBackend::Add(const Tensor& a, const Tensor& b, Tensor& output)
 
 void CpuBackend::Multiply(const Tensor& a, const Tensor& b, Tensor& output)
 {
-    a.Validate();
-    b.Validate();
-    output.Validate();
+    a.Validate(DeviceType::CPU, DataType::Float32);
+    b.Validate(DeviceType::CPU, DataType::Float32);
+    output.Validate(DeviceType::CPU, DataType::Float32);
 
     Utils::RequireSameShape(a, b, "a and b must have equal shapes");
-
     Utils::RequireSameShape(a, output, "a and output must have equal shapes");
 
     Math::Multiply(a.FloatData(), b.FloatData(), output.FloatData(), a.ElementCount());
@@ -179,8 +192,8 @@ void CpuBackend::Multiply(const Tensor& a, const Tensor& b, Tensor& output)
 
 void CpuBackend::SiLU(const Tensor& x, Tensor& output)
 {
-    x.Validate();
-    output.Validate();
+    x.Validate(DeviceType::CPU, DataType::Float32);
+    output.Validate(DeviceType::CPU, DataType::Float32);
 
     Utils::RequireSameShape(x, output, "x and output must have equal shapes");
 
@@ -190,10 +203,10 @@ void CpuBackend::SiLU(const Tensor& x, Tensor& output)
 void CpuBackend::RoPE(Tensor& source, const std::size_t position, const std::size_t headCount,
                       const std::size_t headDimension, const float theta)
 {
-    source.Validate();
+    source.Validate(DeviceType::CPU, DataType::Float32);
 
     if (headCount == 0 || headDimension == 0 || headDimension % 2 != 0)
-        throw std::invalid_argument("RoPE requires positive headCount ""and even headDimension");
+        throw std::invalid_argument("RoPE requires positive headCount and even headDimension");
 
     if (theta <= 0.0f)
         throw std::invalid_argument("RoPE theta must be positive");
@@ -201,7 +214,7 @@ void CpuBackend::RoPE(Tensor& source, const std::size_t position, const std::siz
     const auto expectedElementCount = Math::CheckedMultiply(headCount, headDimension);
 
     if (source.ElementCount() != expectedElementCount)
-        throw std::invalid_argument("q sizes do not match ""headCount * headDimension");
+        throw std::invalid_argument("q sizes do not match headCount * headDimension");
 
     Math::RoPE(source.FloatData(), position, headCount, headDimension, theta);
 }
@@ -210,10 +223,10 @@ void CpuBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor& 
                            const std::size_t validTokenCount, const std::size_t attentionHeadCount,
                            const std::size_t keyValueHeadCount, Tensor& output)
 {
-    q.Validate();
-    kCache.Validate();
-    vCache.Validate();
-    output.Validate();
+    q.Validate(DeviceType::CPU, DataType::Float32);
+    kCache.Validate(DeviceType::CPU, DataType::Float32);
+    vCache.Validate(DeviceType::CPU, DataType::Float32);
+    output.Validate(DeviceType::CPU, DataType::Float32);
 
     if (attentionHeadCount == 0 || keyValueHeadCount == 0)
         throw std::invalid_argument("Attention head counts must be positive");
@@ -248,8 +261,8 @@ void CpuBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor& 
 
 void CpuBackend::CopyToCache(const Tensor& source, Tensor& cache, const std::size_t position)
 {
-    source.Validate();
-    cache.Validate();
+    source.Validate(DeviceType::CPU, DataType::Float32);
+    cache.Validate(DeviceType::CPU, DataType::Float32);
 
     if (cache.shape.size() < 2)
         throw std::invalid_argument("cache must have at least two dimensions");

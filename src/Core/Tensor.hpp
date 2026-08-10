@@ -11,7 +11,7 @@
 #include "Math/Math.hpp"
 
 struct Tensor
-{
+{    
     std::string tensorName = "Tensor";
 
     std::vector<std::size_t> shape;

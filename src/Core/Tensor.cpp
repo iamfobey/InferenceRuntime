@@ -26,7 +26,7 @@ void Tensor::Validate(const DeviceType requiredDeviceType, const DataType requir
     if (byteOffset % alignment != 0)
         throw std::invalid_argument(tensorName + " has an invalid byte offset");
 
-    const std::size_t requiredBytes = Math::CheckedMultiply(ElementCount(), Utils::DataTypeSize(dataType));
+    const auto requiredBytes = Math::CheckedMultiply(ElementCount(), Utils::DataTypeSize(dataType));
 
     if (byteOffset > buffer->SizeBytes() || requiredBytes > buffer->SizeBytes() - byteOffset)
     {

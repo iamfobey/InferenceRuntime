@@ -32,7 +32,10 @@ namespace Math
 
     void SiLU(const float* x, float* output, std::size_t elementCount);
 
-    void RoPE(float* source, std::size_t position, std::size_t headCount, std::size_t headDimension, float theta);
+    void PreCalc(float* sourceCos, float* sourceSin, std::size_t position, std::size_t headDimension, float theta);
+    
+    void RoPE(float* source, const float* inputCos, const float* inputSin, std::size_t headCount,
+              std::size_t headDimension);
 
     void Attention(const float* q, const float* kCache, const float* vCache, float* output, std::size_t validTokenCount,
                    std::size_t attentionHeadCount, std::size_t keyValueHeadCount, std::size_t headDimension);

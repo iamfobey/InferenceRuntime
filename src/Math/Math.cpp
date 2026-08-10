@@ -8,6 +8,8 @@
 
 #include "Math/Math.hpp"
 
+#include <iostream>
+
 #if HAVE_AVX2_SUPPORT
 #include <immintrin.h>
 #endif
@@ -16,7 +18,7 @@ namespace Math
 {
     std::uint16_t Float32ToFloat16(const float value) noexcept
     {
-        const std::uint32_t bits = std::bit_cast<std::uint32_t>(value); // NOLINT(*-use-auto)
+        const std::uint32_t bits = std::bit_cast<std::uint32_t>(value);
         const std::uint32_t sign = (bits >> 16) & 0x8000u;
         const std::uint32_t exponent = (bits >> 23) & 0xFFu;
         std::uint32_t mantissa = bits & 0x7FFFFFu;
@@ -254,14 +256,12 @@ namespace Math
 
     void Add(const float* a, const float* b, float* output, const std::size_t elementCount)
     {
-#pragma omp parallel for
         for (std::int64_t i = 0; i < static_cast<std::int64_t>(elementCount); ++i)
             output[i] = a[i] + b[i];
     }
 
     void Multiply(const float* a, const float* b, float* output, const std::size_t elementCount)
     {
-#pragma omp parallel for
         for (std::int64_t i = 0; i < static_cast<std::int64_t>(elementCount); ++i)
             output[i] = a[i] * b[i];
     }
@@ -276,7 +276,6 @@ namespace Math
 
     void SiLU(const float* x, float* output, const std::size_t elementCount)
     {
-#pragma omp parallel for
         for (std::int64_t i = 0; i < static_cast<std::int64_t>(elementCount); ++i)
         {
             const auto x_i = x[i];
@@ -284,8 +283,27 @@ namespace Math
         }
     }
 
-    void RoPE(float* source, const std::size_t position, const std::size_t headCount,
-              const std::size_t headDimension, const float theta)
+    void PreCalc(float* sourceCos, float* sourceSin, std::size_t position, std::size_t headDimension, float theta)
+    {
+        if (headDimension == 0 || headDimension % 2 != 0)
+            return;
+
+        const auto halfDimension = headDimension / 2;
+
+        for (std::size_t p{}; p < halfDimension; ++p)
+        {
+            const auto exponent = static_cast<float>(2 * p) / static_cast<float>(headDimension);
+            const auto inverseFrequency = 1.0f / std::pow(theta, exponent);
+            const auto angle = static_cast<float>(position) * inverseFrequency;
+            const auto cosAngle = std::cos(angle);
+            const auto sinAngle = std::sin(angle);
+            sourceCos[p] = cosAngle;
+            sourceSin[p] = sinAngle;
+        }
+    }
+
+    void RoPE(float* source, const float* inputCos, const float* inputSin, const std::size_t headCount,
+              const std::size_t headDimension)
     {
         if (headDimension == 0 || headDimension % 2 != 0)
             return;
@@ -298,15 +316,13 @@ namespace Math
 
             for (std::size_t p{}; p < halfDimension; ++p)
             {
-                const auto exponent = static_cast<float>(2 * p) / static_cast<float>(headDimension);
-                const auto inverseFrequency = 1.0f / std::pow(theta, exponent);
-                const auto angle = static_cast<float>(position) * inverseFrequency;
-                const auto cosAngle = std::cos(angle);
-                const auto sinAngle = std::sin(angle);
                 const auto firstIndex = headOffset + p;
                 const auto secondIndex = headOffset + halfDimension + p;
                 const auto first = source[firstIndex];
                 const auto second = source[secondIndex];
+
+                const auto cosAngle = inputCos[p];
+                const auto sinAngle = inputSin[p];
 
                 source[firstIndex] = first * cosAngle - second * sinAngle;
                 source[secondIndex] = first * sinAngle + second * cosAngle;

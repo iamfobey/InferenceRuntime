@@ -200,23 +200,39 @@ void CpuBackend::SiLU(const Tensor& x, Tensor& output)
     Math::SiLU(x.FloatData(), output.FloatData(), x.ElementCount());
 }
 
-void CpuBackend::RoPE(Tensor& source, const std::size_t position, const std::size_t headCount,
-                      const std::size_t headDimension, const float theta)
+void CpuBackend::PreCalc(Tensor& sourceCos, Tensor& sourceSin, std::size_t position, std::size_t headDimension,
+                         float theta)
 {
-    source.Validate(DeviceType::CPU, DataType::Float32);
+    sourceCos.Validate(DeviceType::CPU, DataType::Float32);
+    sourceSin.Validate(DeviceType::CPU, DataType::Float32);
 
-    if (headCount == 0 || headDimension == 0 || headDimension % 2 != 0)
-        throw std::invalid_argument("RoPE requires positive headCount and even headDimension");
+    if (headDimension == 0 || headDimension % 2 != 0)
+        throw std::invalid_argument("RoPE requires even headDimension");
 
     if (theta <= 0.0f)
         throw std::invalid_argument("RoPE theta must be positive");
+
+    const auto offset = position * (headDimension / 2);
+
+    Math::PreCalc(sourceCos.FloatData() + offset, sourceSin.FloatData() + offset, position, headDimension, theta);
+}
+
+void CpuBackend::RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inputSin, std::size_t headCount,
+                      std::size_t headDimension)
+{
+    source.Validate(DeviceType::CPU, DataType::Float32);
+    inputCos.Validate(DeviceType::CPU, DataType::Float32);
+    inputSin.Validate(DeviceType::CPU, DataType::Float32);
+
+    if (headCount == 0 || headDimension == 0 || headDimension % 2 != 0)
+        throw std::invalid_argument("RoPE requires positive headCount and even headDimension");
 
     const auto expectedElementCount = Math::CheckedMultiply(headCount, headDimension);
 
     if (source.ElementCount() != expectedElementCount)
         throw std::invalid_argument("q sizes do not match headCount * headDimension");
 
-    Math::RoPE(source.FloatData(), position, headCount, headDimension, theta);
+    Math::RoPE(source.FloatData(), inputCos.FloatData(), inputSin.FloatData(), headCount, headDimension);
 }
 
 void CpuBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor& vCache,

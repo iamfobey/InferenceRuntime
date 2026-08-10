@@ -37,7 +37,11 @@ public:
 
     void SiLU(const Tensor& x, Tensor& output) override;
 
-    void RoPE(Tensor& source, size_t position, size_t headCount, size_t headDimension, float theta) override;
+    void PreCalc(Tensor& sourceCos, Tensor& sourceSin, std::size_t position, std::size_t headDimension,
+                 float theta) override;
+
+    void RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inputSin, std::size_t headCount,
+              std::size_t headDimension) override;
 
     void Attention(const Tensor& q, const Tensor& kCache, const Tensor& vCache, std::size_t validTokenCount,
                    std::size_t attentionHeadCount, std::size_t keyValueHeadCount, Tensor& output) override;

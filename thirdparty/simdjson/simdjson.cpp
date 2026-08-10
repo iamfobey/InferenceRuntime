@@ -17327,7 +17327,7 @@ simdjson_warn_unused simdjson_inline error_code write_float(const uint8_t *const
 //
 // Our objective is accurate parsing (ULP of 0) at high speed.
 template<typename W>
-simdjson_warn_unused simdjson_inline error_code parse_number(const uint8_t *const src, W &writer);
+simdjson_warn_unused simdjson_inline error_code parse_number(const uint8_t * src, W &writer);
 
 // for performance analysis, it is sometimes  useful to skip parsing
 #ifdef SIMDJSON_SKIPNUMBERPARSING
@@ -19057,7 +19057,7 @@ namespace simdjson {
 namespace haswell {
 namespace {
 
-simdjson_inline simd8<uint8_t> must_be_2_3_continuation(const simd8<uint8_t> prev2, const simd8<uint8_t> prev3);
+simdjson_inline simd8<uint8_t> must_be_2_3_continuation(simd8<uint8_t> prev2, simd8<uint8_t> prev3);
 simdjson_inline bool is_ascii(const simd8x64<uint8_t>& input);
 
 } // unnamed namespace
@@ -23715,7 +23715,7 @@ simdjson_warn_unused simdjson_inline error_code write_float(const uint8_t *const
 //
 // Our objective is accurate parsing (ULP of 0) at high speed.
 template<typename W>
-simdjson_warn_unused simdjson_inline error_code parse_number(const uint8_t *const src, W &writer);
+simdjson_warn_unused simdjson_inline error_code parse_number(const uint8_t * src, W &writer);
 
 // for performance analysis, it is sometimes  useful to skip parsing
 #ifdef SIMDJSON_SKIPNUMBERPARSING
@@ -25444,7 +25444,7 @@ namespace simdjson {
 namespace icelake {
 namespace {
 
-simdjson_inline simd8<uint8_t> must_be_2_3_continuation(const simd8<uint8_t> prev2, const simd8<uint8_t> prev3);
+simdjson_inline simd8<uint8_t> must_be_2_3_continuation(simd8<uint8_t> prev2, simd8<uint8_t> prev3);
 simdjson_inline bool is_ascii(const simd8x64<uint8_t>& input);
 
 } // unnamed namespace
@@ -37165,7 +37165,7 @@ simdjson_warn_unused simdjson_inline error_code write_float(const uint8_t *const
 //
 // Our objective is accurate parsing (ULP of 0) at high speed.
 template<typename W>
-simdjson_warn_unused simdjson_inline error_code parse_number(const uint8_t *const src, W &writer);
+simdjson_warn_unused simdjson_inline error_code parse_number(const uint8_t * src, W &writer);
 
 // for performance analysis, it is sometimes  useful to skip parsing
 #ifdef SIMDJSON_SKIPNUMBERPARSING
@@ -39322,7 +39322,7 @@ namespace simdjson {
 namespace westmere {
 namespace {
 
-simdjson_inline simd8<uint8_t> must_be_2_3_continuation(const simd8<uint8_t> prev2, const simd8<uint8_t> prev3);
+simdjson_inline simd8<uint8_t> must_be_2_3_continuation(simd8<uint8_t> prev2, simd8<uint8_t> prev3);
 simdjson_inline bool is_ascii(const simd8x64<uint8_t>& input);
 
 } // unnamed namespace
@@ -62433,7 +62433,7 @@ simdjson_warn_unused simdjson_inline error_code write_float(const uint8_t *const
 //
 // Our objective is accurate parsing (ULP of 0) at high speed.
 template<typename W>
-simdjson_warn_unused simdjson_inline error_code parse_number(const uint8_t *const src, W &writer);
+simdjson_warn_unused simdjson_inline error_code parse_number(const uint8_t * src, W &writer);
 
 // for performance analysis, it is sometimes  useful to skip parsing
 #ifdef SIMDJSON_SKIPNUMBERPARSING

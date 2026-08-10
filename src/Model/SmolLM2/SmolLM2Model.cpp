@@ -156,6 +156,27 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
         m_Query = backend.CreateTensor({Config.numAttentionHeads, Config.headDimension}, DataType::Float32);
         m_Key = backend.CreateTensor({Config.numKeyValueHeads, Config.headDimension}, DataType::Float32);
         m_Value = backend.CreateTensor({Config.numKeyValueHeads, Config.headDimension}, DataType::Float32);
+
+        const auto halfDimension = Config.headDimension / 2;
+
+        m_RopeCos = backend.CreateTensor(
+            {Config.maxPositionEmbeddings, halfDimension},
+            DataType::Float32);
+
+        m_RopeSin = backend.CreateTensor(
+            {Config.maxPositionEmbeddings, halfDimension},
+            DataType::Float32);
+
+        for (std::size_t position{}; position < Config.maxPositionEmbeddings; ++position)
+        {
+            backend.PreCalc(
+                m_RopeCos,
+                m_RopeSin,
+                position,
+                Config.headDimension,
+                static_cast<float>(Config.ropeTheta));
+        }
+
         m_AttentionOutput = backend.CreateTensor({Config.numAttentionHeads, Config.headDimension}, DataType::Float32);
         m_AttentionProjected = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
         m_Gate = backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
@@ -228,10 +249,8 @@ void SmolLM2Model::DecodeStep(std::int32_t tokenId, IBackend& backend)
         backend.Linear(selfAttnQ, m_Normalized, nullptr, m_Query);
         backend.Linear(selfAttnK, m_Normalized, nullptr, m_Key);
         backend.Linear(selfAttnV, m_Normalized, nullptr, m_Value);
-        backend.RoPE(m_Query, m_Position, Config.numAttentionHeads, Config.headDimension,
-                     static_cast<float>(Config.ropeTheta));
-        backend.RoPE(m_Key, m_Position, Config.numKeyValueHeads, Config.headDimension,
-                     static_cast<float>(Config.ropeTheta));
+        backend.RoPE(m_Query, m_RopeCos, m_RopeSin, Config.numAttentionHeads, Config.headDimension);
+        backend.RoPE(m_Key, m_RopeCos, m_RopeSin, Config.numKeyValueHeads, Config.headDimension);
         backend.CopyToCache(m_Key, m_KeyCaches[layerIndex], m_Position);
         backend.CopyToCache(m_Value, m_ValueCaches[layerIndex], m_Position);
 
@@ -266,5 +285,3 @@ const Tensor& SmolLM2Model::Logits() const noexcept
 {
     return m_Logits;
 }
-
-

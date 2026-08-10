@@ -55,6 +55,9 @@ private:
     Tensor m_Key;
     Tensor m_Value;
 
+    Tensor m_RopeCos;
+    Tensor m_RopeSin;
+
     Tensor m_AttentionOutput;
     Tensor m_AttentionProjected;
 

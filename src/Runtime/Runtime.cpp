@@ -1,6 +1,5 @@
 ﻿#include "Runtime/Runtime.hpp"
 
-#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <span>

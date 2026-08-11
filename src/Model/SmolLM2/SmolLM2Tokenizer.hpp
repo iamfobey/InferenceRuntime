@@ -2,7 +2,6 @@
 
 #include "Model/ITokenizer.hpp"
 
-#include <cstdint>
 #include <span>
 #include <string>
 #include <string_view>

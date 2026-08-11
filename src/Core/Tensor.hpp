@@ -3,7 +3,6 @@
 #include "Enums.hpp"
 #include "IBuffer.hpp"
 
-#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>

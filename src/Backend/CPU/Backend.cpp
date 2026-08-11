@@ -13,6 +13,8 @@
 
 #include <omp.h>
 
+#include "Utils/Converters.hpp"
+
 CpuBackend::CpuBackend(const CpuBackendOptions options) :
     m_Options(options)
 {
@@ -55,7 +57,7 @@ void CpuBackend::Upload(Tensor& destination, const std::span<const float> source
     switch (destination.dataType)
     {
     case DataType::Float16:
-        Math::ConvertFloat32ToFloat16(source.data(), destination.Float16Data(), source.size());
+        Utils::Converters::ConvertFloat32ToFloat16(source.data(), destination.Float16Data(), source.size());
         break;
     case DataType::Float32:
         std::memcpy(destination.FloatData(), source.data(), source.size_bytes());
@@ -76,7 +78,7 @@ void CpuBackend::Download(const Tensor& source, const std::span<float> destinati
     switch (source.dataType)
     {
     case DataType::Float16:
-        Math::ConvertFloat16ToFloat32(source.Float16Data(), destination.data(), destination.size());
+        Utils::Converters::ConvertFloat16ToFloat32(source.Float16Data(), destination.data(), destination.size());
         break;
     case DataType::Float32:
         std::memcpy(destination.data(), source.FloatData(), destination.size_bytes());

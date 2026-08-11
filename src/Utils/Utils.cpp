@@ -1,6 +1,5 @@
 #include "Utils.hpp"
 
-#include <cstdint>
 #include <stdexcept>
 
 #include "Core/Enums.hpp"

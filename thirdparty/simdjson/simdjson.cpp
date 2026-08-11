@@ -155,9 +155,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <cfloat>
-#include <cassert>
 #include <climits>
 #ifndef _WIN32
 // strcasecmp, strncasecmp
@@ -651,7 +649,6 @@ double from_chars(const char *first, const char* end) noexcept;
 // even if we do not have C++17 support.
 #ifdef __cpp_lib_string_view
 #define SIMDJSON_HAS_STRING_VIEW
-#include <string_view>
 #endif
 
 // Some systems have string_view even if we do not have C++17 support,
@@ -3111,8 +3108,6 @@ concept nothrow_tag_invocable =
 #ifndef SIMDJSON_CONSTEVALUTIL_H
 #define SIMDJSON_CONSTEVALUTIL_H
 
-#include <string>
-#include <string_view>
 #include <array>
 
 namespace simdjson {
@@ -3267,8 +3262,6 @@ SIMDJSON_PUSH_DISABLE_UNUSED_WARNINGS
 /* skipped duplicate #include <base.h> */
 
 #include <cstring>
-#include <cstdint>
-#include <array>
 #include <cmath>
 
 namespace simdjson {
@@ -4217,7 +4210,6 @@ char *to_chars(char *first, const char *last, double value) {
 
 /* skipped duplicate #include <base.h> */
 
-#include <cstdint>
 #include <cstring>
 #include <limits>
 
@@ -6912,8 +6904,6 @@ SIMDJSON_DLLIMPORTEXPORT const uint64_t simdjson::internal::power_of_five_128[]=
 
 #if SIMDJSON_IMPLEMENTATION_ARM64 || SIMDJSON_IMPLEMENTATION_ICELAKE || SIMDJSON_IMPLEMENTATION_HASWELL || SIMDJSON_IMPLEMENTATION_WESTMERE || SIMDJSON_IMPLEMENTATION_PPC64 || SIMDJSON_IMPLEMENTATION_LSX || SIMDJSON_IMPLEMENTATION_LASX
 
-#include <cstdint>
-
 namespace simdjson { // table modified and copied from
 namespace internal { // http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetTable
 SIMDJSON_DLLIMPORTEXPORT  const unsigned char BitsSetTable256mul2[256] = {
@@ -7359,8 +7349,6 @@ inline error_code dom_parser_implementation::allocate(size_t capacity, size_t ma
 #endif // SIMDJSON_INTERNAL_DOM_PARSER_IMPLEMENTATION_H
 /* end file simdjson/internal/dom_parser_implementation.h */
 
-#include <memory>
-
 namespace simdjson {
 
 /**
@@ -7677,8 +7665,6 @@ enum instruction_set {
 
 /* skipped duplicate #include "simdjson/base.h" */
 
-#include <cstdint>
-
 namespace simdjson { // table modified and copied from
 namespace internal { // http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetTable
 
@@ -7783,8 +7769,6 @@ class tape_ref;
 
 #endif // SIMDJSON_DOM_BASE_H
 /* end file simdjson/dom/base.h */
-
-#include <memory>
 
 namespace simdjson {
 namespace dom {
@@ -7967,8 +7951,6 @@ POSSIBILITY OF SUCH DAMAGE.
 
 /* skipped duplicate #include "simdjson/internal/instruction_set.h" */
 
-#include <cstdint>
-#include <cstdlib>
 #if defined(_MSC_VER)
 #include <intrin.h>
 #elif defined(HAVE_GCC_GET_CPUID) && defined(USE_GCC_GET_CPUID)
@@ -8185,7 +8167,6 @@ static inline uint32_t detect_supported_architectures() {
 /* end file internal/isadetection.h */
 
 #include <initializer_list>
-#include <type_traits>
 
 namespace simdjson {
 
@@ -16784,10 +16765,6 @@ protected:
 /* amalgamation skipped (editor-only): #include "simdjson/internal/numberparsing_tables.h" */
 /* amalgamation skipped (editor-only): #endif // SIMDJSON_CONDITIONAL_INCLUDE */
 
-#include <limits>
-#include <ostream>
-#include <cstring>
-
 namespace simdjson {
 namespace haswell {
 namespace numberparsing {
@@ -19147,8 +19124,6 @@ using utf8_validation::utf8_checker;
 /* amalgamation skipped (editor-only): #include <generic/stage1/base.h> */
 /* amalgamation skipped (editor-only): #endif // SIMDJSON_CONDITIONAL_INCLUDE */
 
-#include <cstring>
-
 namespace simdjson {
 namespace haswell {
 namespace {
@@ -20562,8 +20537,6 @@ struct tape_writer;
 /* amalgamation skipped (editor-only): #include <simdjson/internal/tape_type.h> */
 /* amalgamation skipped (editor-only): #endif // SIMDJSON_CONDITIONAL_INCLUDE */
 
-#include <cstring>
-
 namespace simdjson {
 namespace haswell {
 namespace {
@@ -21125,7 +21098,6 @@ simdjson_warn_unused simdjson_inline error_code json_iterator::visit_primitive(V
 /* end file generic/stage2/json_iterator.h for haswell */
 /* including generic/stage2/stringparsing.h for haswell: #include <generic/stage2/stringparsing.h> */
 /* begin file generic/stage2/stringparsing.h for haswell */
-#include <cstdint>
 #ifndef SIMDJSON_SRC_GENERIC_STAGE2_STRINGPARSING_H
 
 /* amalgamation skipped (editor-only): #ifndef SIMDJSON_CONDITIONAL_INCLUDE */
@@ -21983,7 +21955,6 @@ class implementation;
 // under clang within visual studio, this will include <x86intrin.h>
 #include <intrin.h>  // visual studio or clang
 #else
-#include <x86intrin.h> // elsewhere
 #endif // SIMDJSON_VISUAL_STUDIO
 
 #if SIMDJSON_CLANG_VISUAL_STUDIO
@@ -23171,10 +23142,6 @@ protected:
 /* amalgamation skipped (editor-only): #include "simdjson/generic/jsoncharutils.h" */
 /* amalgamation skipped (editor-only): #include "simdjson/internal/numberparsing_tables.h" */
 /* amalgamation skipped (editor-only): #endif // SIMDJSON_CONDITIONAL_INCLUDE */
-
-#include <limits>
-#include <ostream>
-#include <cstring>
 
 namespace simdjson {
 namespace icelake {
@@ -25534,8 +25501,6 @@ using utf8_validation::utf8_checker;
 /* amalgamation skipped (editor-only): #include <generic/stage1/base.h> */
 /* amalgamation skipped (editor-only): #endif // SIMDJSON_CONDITIONAL_INCLUDE */
 
-#include <cstring>
-
 namespace simdjson {
 namespace icelake {
 namespace {
@@ -26949,8 +26914,6 @@ struct tape_writer;
 /* amalgamation skipped (editor-only): #include <simdjson/internal/tape_type.h> */
 /* amalgamation skipped (editor-only): #endif // SIMDJSON_CONDITIONAL_INCLUDE */
 
-#include <cstring>
-
 namespace simdjson {
 namespace icelake {
 namespace {
@@ -27512,7 +27475,6 @@ simdjson_warn_unused simdjson_inline error_code json_iterator::visit_primitive(V
 /* end file generic/stage2/json_iterator.h for icelake */
 /* including generic/stage2/stringparsing.h for icelake: #include <generic/stage2/stringparsing.h> */
 /* begin file generic/stage2/stringparsing.h for icelake */
-#include <cstdint>
 #ifndef SIMDJSON_SRC_GENERIC_STAGE2_STRINGPARSING_H
 
 /* amalgamation skipped (editor-only): #ifndef SIMDJSON_CONDITIONAL_INCLUDE */
@@ -35007,7 +34969,6 @@ template <typename T> struct simd8x64;
 // under clang within visual studio, this will include <x86intrin.h>
 #include <intrin.h> // visual studio or clang
 #else
-#include <x86intrin.h> // elsewhere
 #endif // SIMDJSON_VISUAL_STUDIO
 
 
@@ -36621,10 +36582,6 @@ protected:
 /* amalgamation skipped (editor-only): #include "simdjson/generic/jsoncharutils.h" */
 /* amalgamation skipped (editor-only): #include "simdjson/internal/numberparsing_tables.h" */
 /* amalgamation skipped (editor-only): #endif // SIMDJSON_CONDITIONAL_INCLUDE */
-
-#include <limits>
-#include <ostream>
-#include <cstring>
 
 namespace simdjson {
 namespace westmere {
@@ -39412,8 +39369,6 @@ using utf8_validation::utf8_checker;
 /* amalgamation skipped (editor-only): #include <generic/stage1/base.h> */
 /* amalgamation skipped (editor-only): #endif // SIMDJSON_CONDITIONAL_INCLUDE */
 
-#include <cstring>
-
 namespace simdjson {
 namespace westmere {
 namespace {
@@ -40827,8 +40782,6 @@ struct tape_writer;
 /* amalgamation skipped (editor-only): #include <simdjson/internal/tape_type.h> */
 /* amalgamation skipped (editor-only): #endif // SIMDJSON_CONDITIONAL_INCLUDE */
 
-#include <cstring>
-
 namespace simdjson {
 namespace westmere {
 namespace {
@@ -41390,7 +41343,6 @@ simdjson_warn_unused simdjson_inline error_code json_iterator::visit_primitive(V
 /* end file generic/stage2/json_iterator.h for westmere */
 /* including generic/stage2/stringparsing.h for westmere: #include <generic/stage2/stringparsing.h> */
 /* begin file generic/stage2/stringparsing.h for westmere */
-#include <cstdint>
 #ifndef SIMDJSON_SRC_GENERIC_STAGE2_STRINGPARSING_H
 
 /* amalgamation skipped (editor-only): #ifndef SIMDJSON_CONDITIONAL_INCLUDE */
@@ -61302,8 +61254,6 @@ simdjson_inline escaping escaping::copy_and_find(const uint8_t *src, uint8_t *ds
 /* amalgamation skipped (editor-only): #include "simdjson/internal/numberparsing_tables.h" */
 /* amalgamation skipped (editor-only): #endif // SIMDJSON_CONDITIONAL_INCLUDE */
 
-#include <cstring>
-
 #ifdef JSON_TEST_NUMBERS // for unit testing
 void found_invalid_number(const uint8_t *buf);
 void found_integer(int64_t result, const uint8_t *buf);
@@ -61889,10 +61839,6 @@ protected:
 /* amalgamation skipped (editor-only): #include "simdjson/generic/jsoncharutils.h" */
 /* amalgamation skipped (editor-only): #include "simdjson/internal/numberparsing_tables.h" */
 /* amalgamation skipped (editor-only): #endif // SIMDJSON_CONDITIONAL_INCLUDE */
-
-#include <limits>
-#include <ostream>
-#include <cstring>
 
 namespace simdjson {
 namespace fallback {
@@ -63736,7 +63682,6 @@ simdjson_inline uint32_t find_next_document_index(dom_parser_implementation &par
 /* end file generic/stage1/find_next_document_index.h for fallback */
 /* including generic/stage2/stringparsing.h for fallback: #include <generic/stage2/stringparsing.h> */
 /* begin file generic/stage2/stringparsing.h for fallback */
-#include <cstdint>
 #ifndef SIMDJSON_SRC_GENERIC_STAGE2_STRINGPARSING_H
 
 /* amalgamation skipped (editor-only): #ifndef SIMDJSON_CONDITIONAL_INCLUDE */
@@ -64428,8 +64373,6 @@ simdjson_warn_unused simdjson_inline error_code json_iterator::visit_primitive(V
 /* amalgamation skipped (editor-only): #include <generic/stage2/base.h> */
 /* amalgamation skipped (editor-only): #include <simdjson/internal/tape_type.h> */
 /* amalgamation skipped (editor-only): #endif // SIMDJSON_CONDITIONAL_INCLUDE */
-
-#include <cstring>
 
 namespace simdjson {
 namespace fallback {

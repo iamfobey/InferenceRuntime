@@ -1,6 +1,5 @@
 #include "Tensor.hpp"
 
-#include <cstdint>
 #include <iostream>
 #include <ostream>
 #include <stdexcept>

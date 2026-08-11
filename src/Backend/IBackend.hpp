@@ -2,7 +2,6 @@
 
 #include "Core/Tensor.hpp"
 
-#include <cstdint>
 #include <span>
 #include <vector>
 

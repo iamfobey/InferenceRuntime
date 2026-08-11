@@ -19,8 +19,6 @@ file(GLOB_RECURSE RUNTIME_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/simdjson/simdjson.h"
 )
 
-list(FILTER RUNTIME_SOURCES EXCLUDE REGEX ".*/Main\\.cpp$")
-
 add_library(runtime_core STATIC ${RUNTIME_SOURCES})
 
 target_include_directories(runtime_core PUBLIC
@@ -37,11 +35,18 @@ if (ENABLE_OPENMP)
 endif ()
 
 if (ENABLE_AVX2)
+    file(GLOB AVX2_SOURCES
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/Math/Math.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/Utils/Converters.cpp"
+    )
+
+    list(REMOVE_ITEM RUNTIME_SOURCES ${AVX2_SOURCES})
+
     if (MSVC)
         check_cxx_compiler_flag("/arch:AVX2" COMPILER_SUPPORTS_AVX2)
 
         if (COMPILER_SUPPORTS_AVX2)
-            set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/Math/Math.cpp" PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
+            set_source_files_properties(${AVX2_SOURCES} PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
             set(HAVE_AVX2_SUPPORT 1)
         else ()
             message(WARNING "AVX2 requested, but compiler does not support /arch:AVX2")
@@ -52,8 +57,7 @@ if (ENABLE_AVX2)
         check_cxx_compiler_flag("-mf16c" COMPILER_SUPPORTS_F16C)
 
         if (COMPILER_SUPPORTS_AVX2 AND COMPILER_SUPPORTS_FMA AND COMPILER_SUPPORTS_F16C)
-            set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/Math/Math.cpp"
-                    PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma;-mf16c")
+            set_source_files_properties(${AVX2_SOURCES} PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma;-mf16c")
             set(HAVE_AVX2_SUPPORT 1)
         else ()
             message(WARNING "AVX2/FMA/F16C requested, but compiler does not support all required flags")

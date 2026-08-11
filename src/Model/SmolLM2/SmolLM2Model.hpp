@@ -2,7 +2,6 @@
 
 #include "Model/IModel.hpp"
 
-#include <cstdint>
 #include <span>
 #include <string_view>
 #include <vector>

@@ -4,8 +4,6 @@
 
 An experimental C++20 runtime for running language models on the CPU. It currently loads the **SmolLM2** architecture from a Hugging Face-compatible model directory and performs `float32`/`float16` computation with OpenMP and AVX2 acceleration.
 
-> This project is under development: the current executable performs prefill and decoding and reports average token latency and throughput, but does not yet return generated text.
-
 ## Requirements
 
 - CMake 3.25.1 or later

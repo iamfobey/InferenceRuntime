@@ -8,6 +8,7 @@ include(CTest)
 
 option(ENABLE_OPENMP "Enable OpenMP" ON)
 option(ENABLE_AVX2 "Enable AVX2" ON)
+option(BUILD_BENCHMARKS "Build runtime benchmarks" ON)
 
 set(HAVE_OPENMP_SUPPORT 0)
 set(HAVE_AVX2_SUPPORT 0)
@@ -18,6 +19,8 @@ file(GLOB_RECURSE RUNTIME_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/simdjson/simdjson.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/simdjson/simdjson.h"
 )
+
+list(REMOVE_ITEM RUNTIME_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/Main.cpp")
 
 add_library(runtime_core STATIC ${RUNTIME_SOURCES})
 
@@ -74,6 +77,42 @@ add_executable(InferenceRuntime src/Main.cpp)
 
 target_link_libraries(InferenceRuntime PRIVATE runtime_core)
 
+if (BUILD_TESTING)
+    FetchContent_Declare(
+            googletest
+            GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_TAG v1.17.0
+            GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(googletest)
+
+    file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
+    )
+
+    add_executable(RuntimeTests ${TEST_SOURCES})
+    target_link_libraries(RuntimeTests PRIVATE runtime_core GTest::gtest_main)
+
+    include(GoogleTest)
+    gtest_discover_tests(RuntimeTests)
+endif ()
+
+if (BUILD_BENCHMARKS)
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Build Google Benchmark tests" FORCE)
+    set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "Build Google Benchmark GoogleTest tests" FORCE)
+
+    FetchContent_Declare(
+            googlebenchmark
+            GIT_REPOSITORY https://github.com/google/benchmark.git
+            GIT_TAG v1.9.5
+            GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(googlebenchmark)
+
+    add_executable(RuntimeBenchmark benchmarks/RuntimeBenchmark.cpp)
+    target_link_libraries(RuntimeBenchmark PRIVATE runtime_core benchmark::benchmark)
+endif ()
+
 message(STATUS "OpenMP: ${HAVE_OPENMP_SUPPORT}")
 message(STATUS "AVX2: ${HAVE_AVX2_SUPPORT}")
-
+message(STATUS "Benchmark: ${BUILD_BENCHMARKS}")

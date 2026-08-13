@@ -37,8 +37,8 @@ namespace Math
         }
     }
 
-    void Linear(const std::uint16_t* matrix, const float* input, const float* bias, float* output,
-                const std::size_t rows, const std::size_t columns)
+    void Linear(const std::uint16_t* matrix, const float* input, float* output, std::size_t rows,
+                std::size_t columns)
     {
 #pragma omp parallel for
         for (std::int64_t row = 0; row < static_cast<std::int64_t>(rows); ++row)
@@ -62,7 +62,7 @@ namespace Math
             alignas(32) float values[8];
             _mm256_store_ps(values, accumulator);
 
-            auto sum = bias[row];
+            float sum = 0.0f;
 
             for (const auto value : values)
                 sum += value;
@@ -193,8 +193,9 @@ namespace Math
     }
 
     void Attention(const float* q, const float* kCache, const float* vCache, float* output,
-                   const std::size_t validTokenCount, const std::size_t attentionHeadCount,
-                   const std::size_t keyValueHeadCount, const std::size_t headDimension)
+                   float* scores, const std::size_t validTokenCount,
+                   const std::size_t attentionHeadCount, const std::size_t keyValueHeadCount,
+                   const std::size_t headDimension)
     {
         if (validTokenCount == 0 || attentionHeadCount == 0 || keyValueHeadCount == 0 || headDimension == 0)
             return;
@@ -204,8 +205,6 @@ namespace Math
 
         const auto groupSize = attentionHeadCount / keyValueHeadCount;
         const auto scale = 1.0f / std::sqrt(static_cast<float>(headDimension));
-
-        std::vector<float> scores(validTokenCount);
 
         for (std::size_t h{}; h < attentionHeadCount; ++h)
         {

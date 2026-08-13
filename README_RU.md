@@ -20,6 +20,22 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
+## Тесты
+
+```powershell
+ctest --test-dir build -C Release --output-on-failure
+```
+
+## Бенчмарки
+
+Сконфигурируйте проект с `-DBUILD_BENCHMARKS=ON`, затем запустите:
+
+```powershell
+.\build\Release\RuntimeBenchmark.exe smollm2 C:\models\SmolLM2-135M "Hello, world!"
+```
+
+`RuntimeBenchmark` выполняет пять итераций генерации по 300 токенов и выводит время и токенов в секунду.
+
 Если OpenMP или AVX2 недоступны, их можно отключить при конфигурации:
 
 ```powershell
@@ -56,4 +72,3 @@ tokenizer.json
 
 - Только CPU; число потоков в демонстрационном приложении сейчас задано в `src/Main.cpp`.
 - Сэмплирование — greedy (`argmax`).
-- Тесты в `tests/` пока не подключены к CMake.

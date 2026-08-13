@@ -117,7 +117,7 @@ void CpuBackend::Embedding(const Tensor& embeddingTable, const std::span<const s
                     hiddenSize);
 }
 
-void CpuBackend::Linear(const Tensor& W, const Tensor& x, const Tensor* b, Tensor& y)
+void CpuBackend::Linear(const Tensor& W, const Tensor& x, Tensor& y)
 {
     W.Validate(DeviceType::CPU, DataType::Float16);
     x.Validate(DeviceType::CPU, DataType::Float32);
@@ -135,25 +135,7 @@ void CpuBackend::Linear(const Tensor& W, const Tensor& x, const Tensor* b, Tenso
     if (y.ElementCount() != matRows)
         throw std::invalid_argument("y element count must equal W matRows");
 
-    const float* offsetPointer{};
-    std::vector<float> zeroOffset{};
-
-    if (b != nullptr)
-    {
-        b->Validate(DeviceType::CPU, DataType::Float32);
-
-        if (b->ElementCount() != matRows)
-            throw std::invalid_argument("b element count must equal W matRows");
-
-        offsetPointer = b->FloatData();
-    }
-    else
-    {
-        zeroOffset.resize(matRows, 0.0f);
-        offsetPointer = zeroOffset.data();
-    }
-
-    Math::Linear(W.Float16Data(), x.FloatData(), offsetPointer, y.FloatData(), matRows, matColumns);
+    Math::Linear(W.Float16Data(), x.FloatData(), y.FloatData(), matRows, matColumns);
 }
 
 void CpuBackend::RMSNorm(const Tensor& x, const Tensor& weight, const float epsilon, Tensor& y)
@@ -220,7 +202,7 @@ void CpuBackend::PreCalc(Tensor& sourceCos, Tensor& sourceSin, std::size_t posit
 }
 
 void CpuBackend::RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inputSin, std::size_t headCount,
-                      std::size_t headDimension)
+                      size_t position, std::size_t headDimension)
 {
     source.Validate(DeviceType::CPU, DataType::Float32);
     inputCos.Validate(DeviceType::CPU, DataType::Float32);
@@ -234,12 +216,15 @@ void CpuBackend::RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inpu
     if (source.ElementCount() != expectedElementCount)
         throw std::invalid_argument("q sizes do not match headCount * headDimension");
 
-    Math::RoPE(source.FloatData(), inputCos.FloatData(), inputSin.FloatData(), headCount, headDimension);
+    const auto offset = position * (headDimension / 2);
+
+    Math::RoPE(source.FloatData(), inputCos.FloatData() + offset, inputSin.FloatData() + offset, headCount,
+               headDimension);
 }
 
 void CpuBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor& vCache,
-                           const std::size_t validTokenCount, const std::size_t attentionHeadCount,
-                           const std::size_t keyValueHeadCount, Tensor& output)
+                           Tensor& scores, const std::size_t validTokenCount,
+                           const std::size_t attentionHeadCount, const std::size_t keyValueHeadCount, Tensor& output)
 {
     q.Validate(DeviceType::CPU, DataType::Float32);
     kCache.Validate(DeviceType::CPU, DataType::Float32);
@@ -273,8 +258,9 @@ void CpuBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor& 
     if (kCache.shape[0] < validTokenCount || kCache.shape[1] != keyValueHeadCount || kCache.shape[2] != headDimension)
         throw std::invalid_argument("Cache shape does not match Attention parameters");
 
-    Math::Attention(q.FloatData(), kCache.FloatData(), vCache.FloatData(), output.FloatData(), validTokenCount,
-                    attentionHeadCount, keyValueHeadCount, headDimension);
+    Math::Attention(q.FloatData(), kCache.FloatData(), vCache.FloatData(), output.FloatData(),
+                    scores.FloatData() + validTokenCount,
+                    validTokenCount, attentionHeadCount, keyValueHeadCount, headDimension);
 }
 
 void CpuBackend::CopyToCache(const Tensor& source, Tensor& cache, const std::size_t position)

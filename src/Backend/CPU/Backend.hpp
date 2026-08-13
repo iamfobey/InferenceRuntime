@@ -27,7 +27,7 @@ public:
 
     void Embedding(const Tensor& embeddingTable, std::span<const std::int32_t> tokenIds, Tensor& output) override;
 
-    void Linear(const Tensor& W, const Tensor& x, const Tensor* b, Tensor& y) override;
+    void Linear(const Tensor& W, const Tensor& x, Tensor& y) override;
 
     void RMSNorm(const Tensor& x, const Tensor& weight, float epsilon, Tensor& y) override;
 
@@ -41,10 +41,11 @@ public:
                  float theta) override;
 
     void RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inputSin, std::size_t headCount,
-              std::size_t headDimension) override;
+              size_t position, std::size_t headDimension) override;
 
-    void Attention(const Tensor& q, const Tensor& kCache, const Tensor& vCache, std::size_t validTokenCount,
-                   std::size_t attentionHeadCount, std::size_t keyValueHeadCount, Tensor& output) override;
+    void Attention(const Tensor& q, const Tensor& kCache, const Tensor& vCache, Tensor& scores,
+                   std::size_t validTokenCount, std::size_t attentionHeadCount, std::size_t keyValueHeadCount,
+                   Tensor& output) override;
 
     void CopyToCache(const Tensor& source, Tensor& cache, std::size_t position) override;
 

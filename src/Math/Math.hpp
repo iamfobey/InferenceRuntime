@@ -8,7 +8,7 @@ namespace Math
     void Embedding(const std::uint16_t* embeddingTable, const std::int32_t* tokenIds, float* output,
                    std::size_t tokenCount, std::size_t vocabularySize, std::size_t hiddenSize);
 
-    void Linear(const std::uint16_t* matrix, const float* input, const float* bias, float* output, std::size_t rows,
+    void Linear(const std::uint16_t* matrix, const float* input, float* output, std::size_t rows,
                 std::size_t columns);
 
     void RMSNorm(const float* x, const std::uint16_t* weight, float epsilon, float* y, std::size_t elementCount);
@@ -23,12 +23,12 @@ namespace Math
     void SiLU(const float* x, float* output, std::size_t elementCount);
 
     void PreCalc(float* sourceCos, float* sourceSin, std::size_t position, std::size_t headDimension, float theta);
-    
+
     void RoPE(float* source, const float* inputCos, const float* inputSin, std::size_t headCount,
               std::size_t headDimension);
 
-    void Attention(const float* q, const float* kCache, const float* vCache, float* output, std::size_t validTokenCount,
-                   std::size_t attentionHeadCount, std::size_t keyValueHeadCount, std::size_t headDimension);
+    void Attention(const float* q, const float* kCache, const float* vCache, float* output, float* scores,
+                   std::size_t validTokenCount, std::size_t attentionHeadCount, std::size_t keyValueHeadCount, std::size_t headDimension);
 
     void CopyToCache(const float* source, float* cache, std::size_t position, std::size_t elementCount);
 }

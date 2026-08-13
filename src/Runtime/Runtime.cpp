@@ -1,6 +1,5 @@
 ﻿#include "Runtime/Runtime.hpp"
 
-#include <iostream>
 #include <memory>
 #include <span>
 #include <string>
@@ -82,43 +81,25 @@ std::string Runtime::Generate(const std::string_view prompt, const std::size_t m
         return {};
     }
 
-    constexpr std::size_t tot = 5;
-    std::chrono::microseconds total{};
+    m_Model->Reset();
+    Prefill(promptTokens);
 
-    for (std::size_t j{}; j < tot; ++j)
+    std::vector<std::int32_t> generatedTokens;
+    generatedTokens.reserve(maximumNewTokens);
+
+    std::int32_t currentToken = SampleGreedy();
+
+    for (std::size_t i{}; i < maximumNewTokens; ++i)
     {
-        m_Model->Reset();
-        Prefill(promptTokens);
+        generatedTokens.push_back(currentToken);
 
-        std::int32_t currentToken = SampleGreedy();
-
-        const auto start = std::chrono::steady_clock::now();
-
-        for (std::size_t i{}; i < maximumNewTokens; ++i)
+        if (i + 1 < maximumNewTokens)
+        {
             currentToken = GenerateNextToken(currentToken);
-
-        const auto end = std::chrono::steady_clock::now();
-
-        total += std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+        }
     }
 
-    const double averageUs = static_cast<double>(total.count()) / tot;
-
-    std::cout << "Per token: " << averageUs / maximumNewTokens << " us\n";
-    std::cout << "Tokens/s: " << maximumNewTokens * 1'000'000.0 / averageUs << '\n';
-
-    // for (std::size_t i = 0; i < maximumNewTokens; ++i)
-    // {
-    //     generatedTokens.push_back(currentToken);
-    //
-    //     if (i + 1 < maximumNewTokens)
-    //     {
-    //         currentToken =
-    //             GenerateNextToken(currentToken);
-    //     }
-    // }
-
-    return Decode({});
+    return Decode(generatedTokens);
 }
 
 std::string_view Runtime::ModelArchitecture() const noexcept

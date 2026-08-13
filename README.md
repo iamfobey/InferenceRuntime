@@ -20,6 +20,22 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
+## Tests
+
+```powershell
+ctest --test-dir build -C Release --output-on-failure
+```
+
+## Benchmarks
+
+Configure with `-DBUILD_BENCHMARKS=ON`, then run:
+
+```powershell
+.\build\Release\RuntimeBenchmark.exe smollm2 C:\models\SmolLM2-135M "Hello, world!"
+```
+
+`RuntimeBenchmark` runs five 300-token generation iterations and reports time and tokens per second.
+
 If OpenMP or AVX2 is unavailable, disable it during configuration:
 
 ```powershell
@@ -56,4 +72,3 @@ Only the `smollm2` architecture identifier is supported. The loader expects weig
 
 - CPU only; the demo application's thread count is currently set in `src/Main.cpp`.
 - Sampling is greedy (`argmax`).
-- Tests in `tests/` are not yet wired into CMake.

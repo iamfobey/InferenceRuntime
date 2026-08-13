@@ -177,6 +177,7 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
                 static_cast<float>(Config.ropeTheta));
         }
 
+        m_AttentionScores = backend.CreateTensor({Config.maxPositionEmbeddings}, DataType::Float32);
         m_AttentionOutput = backend.CreateTensor({Config.numAttentionHeads, Config.headDimension}, DataType::Float32);
         m_AttentionProjected = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
         m_Gate = backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
@@ -242,33 +243,35 @@ void SmolLM2Model::DecodeStep(std::int32_t tokenId, IBackend& backend)
 
     for (std::size_t layerIndex{}; layerIndex < m_Layers.size(); ++layerIndex)
     {
-        auto& [layernorm, downProj, gateProj, upProj, postAttentionLayernorm, selfAttnK, selfAttnO, selfAttnQ,selfAttnV]
+        auto& [layernorm, downProj, gateProj, upProj, postAttentionLayernorm, selfAttnK, selfAttnO, selfAttnQ,
+                selfAttnV]
             = m_Layers[layerIndex];
 
         backend.RMSNorm(m_Hidden, layernorm, static_cast<float>(Config.rmsNormEps), m_Normalized);
-        backend.Linear(selfAttnQ, m_Normalized, nullptr, m_Query);
-        backend.Linear(selfAttnK, m_Normalized, nullptr, m_Key);
-        backend.Linear(selfAttnV, m_Normalized, nullptr, m_Value);
-        backend.RoPE(m_Query, m_RopeCos, m_RopeSin, Config.numAttentionHeads, Config.headDimension);
-        backend.RoPE(m_Key, m_RopeCos, m_RopeSin, Config.numKeyValueHeads, Config.headDimension);
+        backend.Linear(selfAttnQ, m_Normalized, m_Query);
+        backend.Linear(selfAttnK, m_Normalized, m_Key);
+        backend.Linear(selfAttnV, m_Normalized, m_Value);
+        backend.RoPE(m_Query, m_RopeCos, m_RopeSin, Config.numAttentionHeads, m_Position, Config.headDimension);
+        backend.RoPE(m_Key, m_RopeCos, m_RopeSin, Config.numKeyValueHeads, m_Position, Config.headDimension);
         backend.CopyToCache(m_Key, m_KeyCaches[layerIndex], m_Position);
         backend.CopyToCache(m_Value, m_ValueCaches[layerIndex], m_Position);
 
         const auto validTokenCount = m_Position + 1;
 
-        backend.Attention(m_Query, m_KeyCaches[layerIndex], m_ValueCaches[layerIndex], validTokenCount,
+        backend.Attention(m_Query, m_KeyCaches[layerIndex], m_ValueCaches[layerIndex], m_AttentionScores,
+                          validTokenCount,
                           Config.numAttentionHeads, Config.numKeyValueHeads, m_AttentionOutput);
-        backend.Linear(selfAttnO, m_AttentionOutput, nullptr, m_AttentionProjected);
+        backend.Linear(selfAttnO, m_AttentionOutput, m_AttentionProjected);
         backend.Add(m_Hidden, m_AttentionProjected, m_NextHidden);
 
         std::swap(m_Hidden, m_NextHidden);
 
         backend.RMSNorm(m_Hidden, postAttentionLayernorm, static_cast<float>(Config.rmsNormEps), m_Normalized);
-        backend.Linear(gateProj, m_Normalized, nullptr, m_Gate);
-        backend.Linear(upProj, m_Normalized, nullptr, m_Up);
+        backend.Linear(gateProj, m_Normalized, m_Gate);
+        backend.Linear(upProj, m_Normalized, m_Up);
         backend.SiLU(m_Gate, m_ActivatedGate);
         backend.Multiply(m_ActivatedGate, m_Up, m_FeedForward);
-        backend.Linear(downProj, m_FeedForward, nullptr, m_DownOutput);
+        backend.Linear(downProj, m_FeedForward, m_DownOutput);
         backend.Add(m_Hidden, m_DownOutput, m_NextHidden);
 
         std::swap(m_Hidden, m_NextHidden);
@@ -276,7 +279,7 @@ void SmolLM2Model::DecodeStep(std::int32_t tokenId, IBackend& backend)
 
     backend.RMSNorm(m_Hidden, m_FinalNorm, static_cast<float>(Config.rmsNormEps), m_Normalized);
 
-    backend.Linear(m_TokenEmbedding, m_Normalized, nullptr, m_Logits);
+    backend.Linear(m_TokenEmbedding, m_Normalized, m_Logits);
 
     ++m_Position;
 }

@@ -46,21 +46,38 @@ namespace Math
             const auto* matrixRow = matrix + static_cast<std::size_t>(row) * columns;
 
 #if HAVE_AVX2_SUPPORT
-            __m256 accumulator = _mm256_setzero_ps();
+            auto accumulator1 = _mm256_setzero_ps();
+            auto accumulator2 = _mm256_setzero_ps();
+            auto accumulator3 = _mm256_setzero_ps();
+            auto accumulator4 = _mm256_setzero_ps();
 
             std::size_t column{};
-            for (; column + 8 <= columns; column += 8)
+            for (; column + 32 <= columns; column += 32)
             {
-                const auto inputVec = _mm256_loadu_ps(input + column);
-                const auto matrixHalf = _mm_loadu_si128(
-                    reinterpret_cast<const __m128i*>(matrixRow + column));
-                const auto matrixVec = _mm256_cvtph_ps(matrixHalf);
+                const auto inpVec1 = _mm256_loadu_ps(input + column);
+                const auto matVec1 = _mm256_cvtph_ps(
+                    _mm_loadu_si128(reinterpret_cast<const __m128i*>(matrixRow + column)));
+                const auto inpVec2 = _mm256_loadu_ps(input + column + 8);
+                const auto matVec2 = _mm256_cvtph_ps(
+                    _mm_loadu_si128(reinterpret_cast<const __m128i*>(matrixRow + column + 8)));
+                const auto inpVec3 = _mm256_loadu_ps(input + column + 16);
+                const auto matVec3 = _mm256_cvtph_ps(
+                    _mm_loadu_si128(reinterpret_cast<const __m128i*>(matrixRow + column + 16)));
+                const auto inpVec4 = _mm256_loadu_ps(input + column + 24);
+                const auto matVec4 = _mm256_cvtph_ps(
+                    _mm_loadu_si128(reinterpret_cast<const __m128i*>(matrixRow + column + 24)));
 
-                accumulator = _mm256_fmadd_ps(matrixVec, inputVec, accumulator);
+                accumulator1 = _mm256_fmadd_ps(matVec1, inpVec1, accumulator1);
+                accumulator2 = _mm256_fmadd_ps(matVec2, inpVec2, accumulator2);
+                accumulator3 = _mm256_fmadd_ps(matVec3, inpVec3, accumulator3);
+                accumulator4 = _mm256_fmadd_ps(matVec4, inpVec4, accumulator4);
             }
 
-            alignas(32) float values[8];
-            _mm256_store_ps(values, accumulator);
+            alignas(32) float values[32];
+            _mm256_store_ps(values, accumulator1);
+            _mm256_store_ps(values + 8, accumulator2);
+            _mm256_store_ps(values + 16, accumulator3);
+            _mm256_store_ps(values + 24, accumulator4);
 
             float sum = 0.0f;
 

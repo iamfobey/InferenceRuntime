@@ -89,7 +89,7 @@ namespace Math
 
             output[row] = sum;
 #else
-            auto sum = bias[row];
+            auto sum = 0.0f;
 
             for (std::size_t column{}; column < columns; ++column)
                 sum += Utils::Converters::Float16ToFloat32(matrixRow[column]) * input[column];
@@ -232,42 +232,31 @@ namespace Math
             for (std::size_t t{}; t < validTokenCount; ++t)
             {
                 const auto kOffset = (t * keyValueHeadCount + kvHead) * headDimension;
-
                 float score_h_t{};
-
                 for (std::size_t d{}; d < headDimension; ++d)
                     score_h_t += q[qOffset + d] * kCache[kOffset + d];
-
                 score_h_t *= scale;
-
                 scores[t] = score_h_t;
-
                 maximumScore = std::fmaxf(maximumScore, score_h_t);
             }
 
-            float probabilitySum{};
-
-            for (std::size_t t{}; t < validTokenCount; ++t)
-            {
-                scores[t] = std::exp(scores[t] - maximumScore);
-
-                probabilitySum += scores[t];
-            }
-
-            const auto inverseProbabilitySum = 1.0f / probabilitySum;
             const auto outputOffset = h * headDimension;
-
             for (std::size_t d{}; d < headDimension; ++d)
                 output[outputOffset + d] = 0.0f;
 
+            float probabilitySum{};
             for (std::size_t t{}; t < validTokenCount; ++t)
             {
-                const auto probability_h_t = scores[t] * inverseProbabilitySum;
+                const auto e = std::exp(scores[t] - maximumScore);
+                probabilitySum += e;
                 const auto vOffset = (t * keyValueHeadCount + kvHead) * headDimension;
-
                 for (std::size_t d{}; d < headDimension; ++d)
-                    output[outputOffset + d] += probability_h_t * vCache[vOffset + d];
+                    output[outputOffset + d] += e * vCache[vOffset + d];
             }
+
+            const auto inverseProbabilitySum = 1.0f / probabilitySum;
+            for (std::size_t d{}; d < headDimension; ++d)
+                output[outputOffset + d] *= inverseProbabilitySum;
         }
     }
 

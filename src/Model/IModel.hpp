@@ -1,12 +1,11 @@
 ﻿#pragma once
 
-#include "ITokenizer.hpp"
-
 #include <cstdint>
 #include <filesystem>
 #include <span>
 #include <string_view>
 
+class ITokenizer;
 class IBackend;
 struct Tensor;
 

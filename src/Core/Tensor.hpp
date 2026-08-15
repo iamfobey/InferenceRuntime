@@ -2,12 +2,11 @@
 
 #include "Enums.hpp"
 #include "IBuffer.hpp"
+#include "Math/Math.hpp"
 
 #include <memory>
 #include <string>
 #include <vector>
-
-#include "Math/Math.hpp"
 
 struct Tensor
 {
@@ -25,17 +24,11 @@ struct Tensor
     void Validate(DeviceType requiredDeviceType = DeviceType::CPU, DataType requiredDataType = DataType::Float32) const;
 
     [[nodiscard]]
-    std::size_t ElementCount() const noexcept;
-
-    [[nodiscard]]
     float* FloatData() const;
 
     [[nodiscard]]
     std::uint16_t* Float16Data() const;
 
     [[nodiscard]]
-    DeviceType Device() const noexcept;
-
-    [[nodiscard]]
-    bool IsContiguous() const noexcept;
+    bool IsContiguous() const;
 };

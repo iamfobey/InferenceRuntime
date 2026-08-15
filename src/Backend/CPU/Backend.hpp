@@ -7,7 +7,7 @@
 
 struct CpuBackendOptions
 {
-    std::uint8_t threadCount{1};
+    int threadCount{1};
 };
 
 class CpuBackend final : public IBackend
@@ -19,7 +19,7 @@ public:
     DeviceType Device() const noexcept override;
 
     [[nodiscard]]
-    Tensor CreateTensor(std::vector<std::size_t> shape, DataType dataType) override;
+    Tensor CreateTensor(std::vector<size_t> shape, DataType dataType) override;
 
     void Upload(Tensor& destination, std::span<const float> source) override;
 
@@ -37,17 +37,17 @@ public:
 
     void SiLU(const Tensor& x, Tensor& output) override;
 
-    void PreCalc(Tensor& sourceCos, Tensor& sourceSin, std::size_t position, std::size_t headDimension,
-                 float theta) override;
+    void SinCosRoPE(Tensor& sourceCos, Tensor& sourceSin, std::size_t position, std::size_t headDimension,
+                    float theta) override;
 
     void RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inputSin, std::size_t headCount,
               size_t position, std::size_t headDimension) override;
 
     void Attention(const Tensor& q, const Tensor& kCache, const Tensor& vCache, Tensor& scores,
-                   std::size_t validTokenCount, std::size_t attentionHeadCount, std::size_t keyValueHeadCount,
+                   size_t validTokenCount, size_t attentionHeadCount, size_t keyValueHeadCount,
                    Tensor& output) override;
 
-    void CopyToCache(const Tensor& source, Tensor& cache, std::size_t position) override;
+    void CopyToCache(const Tensor& source, Tensor& cache, size_t position) override;
 
     void Synchronize() override;
 

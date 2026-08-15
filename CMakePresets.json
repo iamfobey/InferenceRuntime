@@ -1,0 +1,118 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "conan",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_PROJECT_TOP_LEVEL_INCLUDES": "${sourceDir}/cmake/conan_provider.cmake"
+      }
+    },
+    {
+      "name": "debug-msvc",
+      "displayName": "Debug (MSVC)",
+      "inherits": "conan",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/msvc-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "relwithdebinfo-msvc",
+      "displayName": "RelWithDebInfo (MSVC)",
+      "inherits": "conan",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/msvc-relwithdebinfo",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "release-msvc",
+      "displayName": "Release (MSVC)",
+      "inherits": "conan",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/msvc-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "debug-wsl",
+      "displayName": "Debug (WSL)",
+      "inherits": "conan",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/wsl-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "relwithdebinfo-wsl",
+      "displayName": "RelWithDebInfo (WSL)",
+      "inherits": "conan",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/wsl-relwithdebinfo",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "release-wsl",
+      "displayName": "Release (WSL)",
+      "inherits": "conan",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/wsl-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug-msvc", "configurePreset": "debug-msvc" },
+    { "name": "relwithdebinfo-msvc", "configurePreset": "relwithdebinfo-msvc" },
+    { "name": "release-msvc", "configurePreset": "release-msvc" },
+    { "name": "debug-wsl", "configurePreset": "debug-wsl" },
+    { "name": "relwithdebinfo-wsl", "configurePreset": "relwithdebinfo-wsl" },
+    { "name": "release-wsl", "configurePreset": "release-wsl" }
+  ],
+  "testPresets": [
+    { "name": "debug-msvc", "configurePreset": "debug-msvc", "output": { "outputOnFailure": true } },
+    { "name": "relwithdebinfo-msvc", "configurePreset": "relwithdebinfo-msvc", "output": { "outputOnFailure": true } },
+    { "name": "release-msvc", "configurePreset": "release-msvc", "output": { "outputOnFailure": true } },
+    { "name": "debug-wsl", "configurePreset": "debug-wsl", "output": { "outputOnFailure": true } },
+    { "name": "relwithdebinfo-wsl", "configurePreset": "relwithdebinfo-wsl", "output": { "outputOnFailure": true } },
+    { "name": "release-wsl", "configurePreset": "release-wsl", "output": { "outputOnFailure": true } }
+  ]
+}

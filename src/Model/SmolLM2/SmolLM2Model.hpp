@@ -1,13 +1,12 @@
 ﻿#pragma once
 
 #include "Model/IModel.hpp"
+#include "SmolLM2Config.hpp"
+#include "Core/Tensor.hpp"
 
 #include <span>
 #include <string_view>
 #include <vector>
-
-#include "SmolLM2Config.hpp"
-#include "Core/Tensor.hpp"
 
 class SmolLM2Model final : public IModel
 {

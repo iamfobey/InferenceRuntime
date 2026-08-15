@@ -7,7 +7,7 @@
 class CpuBuffer final : public IBuffer
 {
 public:
-    explicit CpuBuffer(const std::size_t sizeBytes)
+    explicit CpuBuffer(std::size_t sizeBytes)
         : m_Storage(sizeBytes)
     {
     }

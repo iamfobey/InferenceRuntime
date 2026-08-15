@@ -1,19 +1,23 @@
 ﻿#include "Backend/CPU/Backend.hpp"
 #include "Model/IModel.hpp"
 #include "Runtime/Runtime.hpp"
+#include "Model/ModelFactory.hpp"
+#include "Model/ITokenizer.hpp"
+#include "spdlog/spdlog.h"
 
 #include <iostream>
 #include <memory>
 #include <string>
 
-#include "Model/ModelFactory.hpp"
-
 int main(const int argc, char** argv)
 {
-    if (argc < 4)
+    spdlog::set_pattern("[%H:%M:%S.%e] [%^%l%$] %v");
+    const auto* level = std::getenv("INFERENCE_RUNTIME_LOG_LEVEL");
+    spdlog::set_level(level == nullptr ? spdlog::level::info : spdlog::level::from_str(level));
+
+    if (argc < 5)
     {
-        std::cerr
-            << "Usage: InferenceRuntime <architecture> <path to directory with model> <prompt>\n";
+        spdlog::error("Usage: InferenceRuntime <architecture> <path to directory with model> <prompt> <thread_count>");
 
         return 1;
     }
@@ -21,6 +25,7 @@ int main(const int argc, char** argv)
     const auto architecture = argv[1];
     const auto modelPath = argv[2];
     const auto prompt = argv[3];
+    const auto threadCount = argv[4];
 
     try
     {
@@ -28,13 +33,13 @@ int main(const int argc, char** argv)
 
         if (!model)
         {
-            std::cerr << "Unsupported model architecture: " << architecture << '\n';
+            spdlog::error("Unsupported model architecture: {}", architecture);
 
             return 1;
         }
 
         CpuBackendOptions backendOptions = {
-            .threadCount = 6
+            .threadCount = std::atoi(threadCount)
         };
 
         auto backend = std::make_unique<CpuBackend>(backendOptions);
@@ -43,7 +48,7 @@ int main(const int argc, char** argv)
 
         if (!runtime.LoadModel(modelPath))
         {
-            std::cerr << "Failed to load model\n";
+            spdlog::error("Failed to load model");
             return 1;
         }
 
@@ -51,11 +56,12 @@ int main(const int argc, char** argv)
 
         const std::string generatedText = runtime.Generate(prompt, maximumNewTokens);
 
+        spdlog::info("Generation complete: {} bytes", generatedText.size());
         std::cout << generatedText << '\n';
     }
     catch (const std::exception& e)
     {
-        std::cerr << e.what() << '\n';
+        spdlog::error("{}", e.what());
         return 1;
     }
 

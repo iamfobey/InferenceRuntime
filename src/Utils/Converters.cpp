@@ -69,7 +69,7 @@ namespace Utils::Converters
         return sign | (static_cast<std::uint32_t>(halfExponent) << 10) | halfMantissa;
     }
 
-    float Float16ToFloat32(const std::uint16_t value) noexcept
+    float Float16ToFloat32(uint16_t value) noexcept
     {
         const auto sign = (value & 0x8000u) << 16;
         const auto exponent = (value >> 10) & 0x1Fu;
@@ -114,37 +114,37 @@ namespace Utils::Converters
         return std::bit_cast<float>(bits);
     }
 
-    void ConvertFloat32ToFloat16(const float* source, std::uint16_t* destination, const std::size_t elementCount)
+    void ConvertFloat32ToFloat16(const float* pSrc, std::uint16_t* pDest, size_t elementCount)
     {
         std::size_t i{};
 
 #if HAVE_AVX2_SUPPORT
         for (; i + 8 <= elementCount; i += 8)
         {
-            const auto values = _mm256_loadu_ps(source + i);
+            const auto values = _mm256_loadu_ps(pSrc + i);
             const auto halfValues = _mm256_cvtps_ph(values, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
-            _mm_storeu_si128(reinterpret_cast<__m128i*>(destination + i), halfValues);
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(pDest + i), halfValues);
         }
 #endif
 
         for (; i < elementCount; ++i)
-            destination[i] = Float32ToFloat16(source[i]);
+            pDest[i] = Float32ToFloat16(pSrc[i]);
     }
 
-    void ConvertFloat16ToFloat32(const std::uint16_t* source, float* destination, const std::size_t elementCount)
+    void ConvertFloat16ToFloat32(const std::uint16_t* pSrc, float* pDesc, size_t elementCount)
     {
         std::size_t i{};
 
 #if HAVE_AVX2_SUPPORT
         for (; i + 8 <= elementCount; i += 8)
         {
-            const auto halfValues = _mm_loadu_si128(reinterpret_cast<const __m128i*>(source + i));
+            const auto halfValues = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pSrc + i));
             const auto values = _mm256_cvtph_ps(halfValues);
-            _mm256_storeu_ps(destination + i, values);
+            _mm256_storeu_ps(pDesc + i, values);
         }
 #endif
 
         for (; i < elementCount; ++i)
-            destination[i] = Float16ToFloat32(source[i]);
+            pDesc[i] = Float16ToFloat32(pSrc[i]);
     }
 }

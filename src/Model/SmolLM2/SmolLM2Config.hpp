@@ -3,11 +3,11 @@
 #include <filesystem>
 #include <string>
 
-#include "simdjson/simdjson.h"
+#include <simdjson.h>
 
 struct SmolLM2Config
 {
-    std::string_view torchDtype;
+    std::string torchDtype;
     double rmsNormEps;
     std::size_t hiddenSize;
     std::size_t intermediateSize;
@@ -29,7 +29,7 @@ struct SmolLM2Config
         const padded_string json = padded_string::load(path.string());
         ondemand::document config = parser.iterate(json);
         SmolLM2Config smolLm2Config = {
-            .torchDtype = config["torch_dtype"],
+            .torchDtype = std::string(config["torch_dtype"].get_string().value()),
             .rmsNormEps = config["rms_norm_eps"],
             .hiddenSize = config["hidden_size"],
             .intermediateSize = config["intermediate_size"],

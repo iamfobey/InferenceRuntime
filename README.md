@@ -1,52 +1,84 @@
 # InferenceRuntime
 
-[Русская версия](README_RU.md)
+Experimental C++20 CPU runtime for the SmolLM2 architecture. It loads a
+Hugging Face-compatible model directory and executes `float32`/`float16`
+inference with OpenMP and optional AVX2/FMA/F16C acceleration.
 
-An experimental C++20 runtime for running language models on the CPU. It currently loads the **SmolLM2** architecture from a Hugging Face-compatible model directory and performs `float32`/`float16` computation with OpenMP and AVX2 acceleration.
+## Supported build environments
 
-## Requirements
+| Environment | Compiler | Where to run commands | Presets |
+|---|---|---|---|
+| Windows | MSVC | Visual Studio Developer PowerShell or Developer Command Prompt | `*-msvc` |
+| WSL | GCC or Clang | WSL terminal or a CLion WSL toolchain | `*-wsl` |
 
-- CMake 3.25.1 or later
-- A C++20-capable compiler
-- OpenMP (enabled by default and required by the standard configuration)
-- A CPU with AVX2, FMA, and F16C for the accelerated build
+Do not use a Windows preset from WSL or a WSL preset from Windows. Conan runs
+inside the same environment as CMake, so Windows and WSL intentionally have
+separate build directories and dependency packages.
 
-## Build
+## Prerequisites
 
-```powershell
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-```
+Install these tools in every environment you use:
 
-## Tests
+- CMake 3.25.1 or newer;
+- Conan 2, available as `conan` on `PATH`;
+- a C++20 compiler: MSVC on Windows, GCC or Clang in WSL;
+- Ninja for Windows MSVC builds; `make` for WSL builds.
 
-```powershell
-ctest --test-dir build -C Release --output-on-failure
-```
+OpenMP and AVX2 are enabled by default. The accelerated build requires a CPU
+with AVX2, FMA, and F16C support.
 
-## Benchmarks
+## Dependency management
 
-Configure with `-DBUILD_BENCHMARKS=ON`, then run:
+Dependencies are declared in [conanfile.py](conanfile.py).
 
-```powershell
-.\build\Release\RuntimeBenchmark.exe smollm2 C:\models\SmolLM2-135M "Hello, world!"
-```
+## Configure, build, and test
 
-`RuntimeBenchmark` runs five 300-token generation iterations and reports time and tokens per second.
+### Windows with MSVC
 
-If OpenMP or AVX2 is unavailable, disable it during configuration:
-
-```powershell
-cmake -S . -B build -DENABLE_OPENMP=OFF -DENABLE_AVX2=OFF
-```
-
-## Run
-
-Pass the architecture, model directory, and prompt:
+Open a Visual Studio Developer PowerShell or Developer Command Prompt, then:
 
 ```powershell
-.\build\Release\InferenceRuntime.exe smollm2 C:\models\SmolLM2-135M "Hello, world!"
+cmake --preset release-msvc
+cmake --build --preset release-msvc
+ctest --preset release-msvc
 ```
+
+### WSL
+
+Run from the project directory inside the WSL distribution:
+
+```bash
+cmake --preset release-wsl
+cmake --build --preset release-wsl
+ctest --preset release-wsl
+```
+
+Replace `release` with `debug` or `relwithdebinfo` when needed.
+
+### Disable optional CPU features
+
+Pass CMake cache variables during configuration:
+
+```powershell
+cmake --preset release-msvc -DENABLE_OPENMP=OFF -DENABLE_AVX2=OFF
+cmake --build --preset release-msvc
+```
+
+Use the corresponding `*-wsl` preset in WSL.
+
+## CLion
+
+Open the project, select the matching CMake profile for the active toolchain,
+and reload the CMake project:
+
+- use an `*-MSVC` profile with the Windows MSVC toolchain;
+- use an `*-WSL` profile with the WSL toolchain.
+
+The reload/configure step runs Conan automatically. Build or run a CMake
+target only after it finishes. No generated Conan toolchain path needs to be
+entered in CLion settings.
+
+## Run the application
 
 The model directory must contain:
 
@@ -56,17 +88,51 @@ model.safetensors
 tokenizer.json
 ```
 
-Only the `smollm2` architecture identifier is supported. The loader expects weights in a single `model.safetensors` file with `float16` tensors.
+Windows example:
 
-## Project layout
+```powershell
+.\build\msvc-release\InferenceRuntime.exe smollm2 C:\models\SmolLM2-135M "Hello, world!" 1
+```
 
-- `src/Backend/CPU` — CPU backend and tensor operations
-- `src/Math` — computational kernels, including AVX2 variants
-- `src/Model/SmolLM2` — SmolLM2 weights loader, tokenizer, and implementation
-- `src/Runtime` — high-level inference API
-- `thirdparty/simdjson` — bundled JSON parser
+WSL example:
 
-## Limitations
+```bash
+./build/wsl-release/InferenceRuntime smollm2 /mnt/c/models/SmolLM2-135M 'Hello, world!' 1
+```
 
-- CPU only; the demo application's thread count is currently set in `src/Main.cpp`.
-- Sampling is greedy (`argmax`).
+Only the `smollm2` architecture identifier is currently supported. Weights
+must be in one `model.safetensors` file with `float16` tensors.
+
+## Benchmarks
+
+Benchmarks are enabled by default. The executable takes an architecture, model
+directory, and thread count. It runs ten 300-token generation iterations and
+reports elapsed time and tokens per second.
+
+Windows:
+
+```powershell
+.\build\msvc-release\RuntimeBenchmark.exe smollm2 C:\models\SmolLM2-135M 1
+```
+
+WSL:
+
+```bash
+./build/wsl-release/RuntimeBenchmark smollm2 /mnt/c/models/SmolLM2-135M 1
+```
+
+## Troubleshooting
+
+| Symptom | Resolution |
+|---|---|
+| `conan` is not found | Install Conan 2 in the same Windows or WSL environment that runs CMake, then ensure it is on `PATH`. |
+| CMake cannot find a dependency | Delete the affected `build/<profile>` directory and configure that preset again. Do not manually copy generated Conan files between profiles. |
+| MSVC compiler is not found | Start the Windows commands from a Visual Studio Developer shell. |
+| CLion uses the wrong packages | Ensure the CMake profile matches its toolchain: MSVC ↔ `*-MSVC`, WSL ↔ `*-WSL`; then reload CMake. |
+| `cmake/conan_provider.cmake` is missing | Restore it from the repository. It is required for automatic Conan integration. |
+
+## Current limitations
+
+- CPU execution only;
+- greedy (`argmax`) sampling only;
+- demo thread count is currently provided on the command line.

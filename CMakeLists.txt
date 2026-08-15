@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.25.1)
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 project(InferenceRuntime LANGUAGES CXX)
 
 include(CheckCXXCompilerFlag)
-include(FetchContent)
 include(CTest)
 
 option(ENABLE_OPENMP "Enable OpenMP" ON)
@@ -16,8 +19,6 @@ set(HAVE_AVX2_SUPPORT 0)
 file(GLOB_RECURSE RUNTIME_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/simdjson/simdjson.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/simdjson/simdjson.h"
 )
 
 list(REMOVE_ITEM RUNTIME_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/Main.cpp")
@@ -26,10 +27,13 @@ add_library(runtime_core STATIC ${RUNTIME_SOURCES})
 
 target_include_directories(runtime_core PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
-        "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty"
 )
 
 target_compile_features(runtime_core PUBLIC cxx_std_20)
+
+find_package(simdjson CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+target_link_libraries(runtime_core PRIVATE simdjson::simdjson PUBLIC spdlog::spdlog)
 
 if (ENABLE_OPENMP)
     find_package(OpenMP REQUIRED)
@@ -78,36 +82,21 @@ add_executable(InferenceRuntime src/Main.cpp)
 target_link_libraries(InferenceRuntime PRIVATE runtime_core)
 
 if (BUILD_TESTING)
-    FetchContent_Declare(
-            googletest
-            GIT_REPOSITORY https://github.com/google/googletest.git
-            GIT_TAG v1.17.0
-            GIT_SHALLOW TRUE
-    )
-    FetchContent_MakeAvailable(googletest)
+    find_package(GTest CONFIG REQUIRED)
 
     file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
     )
 
     add_executable(RuntimeTests ${TEST_SOURCES})
-    target_link_libraries(RuntimeTests PRIVATE runtime_core GTest::gtest_main)
+    target_link_libraries(RuntimeTests PRIVATE runtime_core GTest::gtest)
 
     include(GoogleTest)
     gtest_discover_tests(RuntimeTests)
 endif ()
 
 if (BUILD_BENCHMARKS)
-    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Build Google Benchmark tests" FORCE)
-    set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "Build Google Benchmark GoogleTest tests" FORCE)
-
-    FetchContent_Declare(
-            googlebenchmark
-            GIT_REPOSITORY https://github.com/google/benchmark.git
-            GIT_TAG v1.9.5
-            GIT_SHALLOW TRUE
-    )
-    FetchContent_MakeAvailable(googlebenchmark)
+    find_package(benchmark CONFIG REQUIRED)
 
     add_executable(RuntimeBenchmark benchmarks/RuntimeBenchmark.cpp)
     target_link_libraries(RuntimeBenchmark PRIVATE runtime_core benchmark::benchmark)

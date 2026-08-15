@@ -5,30 +5,30 @@
 
 namespace Math
 {
-    void Embedding(const std::uint16_t* embeddingTable, const std::int32_t* tokenIds, float* output,
-                   std::size_t tokenCount, std::size_t vocabularySize, std::size_t hiddenSize);
+    void Embedding(const std::uint16_t* pEmbeddingTable, const std::int32_t* pTokenIds, float* pOutput,
+                   size_t tokenCount, size_t vocabularySize, size_t hiddenSize);
 
-    void Linear(const std::uint16_t* matrix, const float* input, float* output, std::size_t rows,
+    void Linear(const std::uint16_t* pMatrix, const float* pInput, float* pOutput, std::size_t rows,
                 std::size_t columns);
 
-    void RMSNorm(const float* x, const std::uint16_t* weight, float epsilon, float* y, std::size_t elementCount);
+    void RMSNorm(const float* pX, const std::uint16_t* pWeight, float epsilon, float* pY, size_t elementCount);
 
-    void Add(const float* a, const float* b, float* output, std::size_t elementCount);
+    void Add(const float* pA, const float* pB, float* pOutput, size_t elementCount);
 
-    void Multiply(const float* a, const float* b, float* output, std::size_t elementCount);
+    void Multiply(const float* a, const float* b, float* output, size_t elementCount);
 
     [[nodiscard]]
-    std::size_t CheckedMultiply(std::size_t a, std::size_t b);
+    std::size_t CheckedMultiply(size_t a, size_t b);
 
-    void SiLU(const float* x, float* output, std::size_t elementCount);
+    void SiLU(const float* pX, float* pOutput, size_t elementCount);
 
-    void PreCalc(float* sourceCos, float* sourceSin, std::size_t position, std::size_t headDimension, float theta);
+    void SinCosRoPE(float* pSourceCos, float* pSourceSin, std::size_t position, std::size_t headDimension, float theta);
 
-    void RoPE(float* source, const float* inputCos, const float* inputSin, std::size_t headCount,
-              std::size_t headDimension);
+    void RoPE(float* pSource, const float* pInputCos, const float* pInputSin, size_t headCount,
+              size_t headDimension);
 
-    void Attention(const float* q, const float* kCache, const float* vCache, float* output, float* scores,
-                   std::size_t validTokenCount, std::size_t attentionHeadCount, std::size_t keyValueHeadCount, std::size_t headDimension);
+    void Attention(const float* pQ, const float* pKCache, const float* pVCache, float* pOutput, float* scores,
+                   size_t validTokenCount, size_t attentionHeadCount, size_t keyValueHeadCount, size_t headDimension);
 
-    void CopyToCache(const float* source, float* cache, std::size_t position, std::size_t elementCount);
+    void CopyToCache(const float* pSource, float* pCache, size_t position, size_t elementCount);
 }

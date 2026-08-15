@@ -17,21 +17,21 @@ public:
     Runtime(std::unique_ptr<IBackend> backend, std::unique_ptr<IModel> model);
 
     [[nodiscard]]
-    bool LoadModel(const std::string& path) const;
+    bool LoadModel(const std::string& path);
 
     [[nodiscard]]
-    std::vector<std::int32_t> Encode(std::string_view text) const;
+    std::vector<std::int32_t> Encode(std::string_view text);
 
     [[nodiscard]]
-    std::string Decode(std::span<const std::int32_t> tokenIds) const;
+    std::string Decode(std::span<const int32_t> tokenIds);
 
-    void Prefill(std::span<const std::int32_t> tokenIds) const;
-
-    [[nodiscard]]
-    std::int32_t GenerateNextToken(std::int32_t currentToken) const;
+    void Prefill(std::span<const int32_t> tokenIds);
 
     [[nodiscard]]
-    std::string Generate(std::string_view prompt, std::size_t maximumNewTokens);
+    std::int32_t GenerateNextToken(int32_t currentToken);
+
+    [[nodiscard]]
+    std::string Generate(std::string_view prompt, size_t maximumNewTokens);
 
     [[nodiscard]]
     std::string_view ModelArchitecture() const noexcept;

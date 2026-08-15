@@ -1,9 +1,8 @@
 #include "Tensor.hpp"
 
-#include <iostream>
-#include <ostream>
 #include <stdexcept>
 
+#include "spdlog/spdlog.h"
 #include "Utils/Utils.hpp"
 
 void Tensor::Validate(const DeviceType requiredDeviceType, const DataType requiredDataType) const
@@ -25,11 +24,12 @@ void Tensor::Validate(const DeviceType requiredDeviceType, const DataType requir
     if (byteOffset % alignment != 0)
         throw std::invalid_argument(tensorName + " has an invalid byte offset");
 
-    const auto requiredBytes = Math::CheckedMultiply(ElementCount(), Utils::DataTypeSize(dataType));
+    const auto requiredBytes = Math::CheckedMultiply(Utils::ElementCount(shape), Utils::DataTypeSize(dataType));
 
     if (byteOffset > buffer->SizeBytes() || requiredBytes > buffer->SizeBytes() - byteOffset)
     {
-        std::cout << requiredBytes << ' ' << buffer->SizeBytes() << std::endl;
+        spdlog::error("Tensor '{}' exceeds buffer: required {} bytes, available {} bytes", tensorName, requiredBytes,
+                      buffer->SizeBytes());
         throw std::out_of_range(tensorName + " exceeds its buffer");
     }
 }
@@ -50,17 +50,7 @@ std::uint16_t* Tensor::Float16Data() const
     return reinterpret_cast<std::uint16_t*>(static_cast<std::byte*>(buffer->Data()) + byteOffset);
 }
 
-DeviceType Tensor::Device() const noexcept
-{
-    return buffer->Device();
-}
-
-std::size_t Tensor::ElementCount() const noexcept
-{
-    return Utils::ElementCount(shape);
-}
-
-bool Tensor::IsContiguous() const noexcept
+bool Tensor::IsContiguous() const
 {
     return strides == Utils::CreateContiguousStrides(shape);
 }

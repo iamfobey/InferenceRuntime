@@ -1,20 +1,22 @@
 ﻿#include "SmolLM2Tokenizer.hpp"
 
-#include "SmolLM2Model.hpp"
-#include "Model/IModel.hpp"
-
 #include <array>
 #include <limits>
 #include <stdexcept>
+#include <chrono>
+
+#include "SmolLM2Model.hpp"
+#include "Model/IModel.hpp"
+#include "spdlog/spdlog.h"
 
 namespace
 {
-    bool IsDirectByte(const std::uint16_t value)
+    bool IsDirectByte(uint16_t value)
     {
         return (value >= 33 && value <= 126) || (value >= 161 && value <= 172) || (value >= 174 && value <= 255);
     }
 
-    void AppendUtf8(std::string& result, const char32_t codePoint)
+    void AppendUtf8(std::string& result, char32_t codePoint)
     {
         if (codePoint <= 0x7F)
         {
@@ -120,22 +122,22 @@ namespace
         return key;
     }
 
-    bool IsDigit(const unsigned char ch)
+    bool IsDigit(unsigned char ch)
     {
         return ch >= '0' && ch <= '9';
     }
 
-    bool IsWhitespace(const unsigned char ch)
+    bool IsWhitespace(unsigned char ch)
     {
         return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t' || ch == '\f' || ch == '\v';
     }
 
-    bool IsLetter(const unsigned char ch)
+    bool IsLetter(unsigned char ch)
     {
         return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch >= 0x80;
     }
 
-    bool IsOther(const unsigned char ch)
+    bool IsOther(unsigned char ch)
     {
         return !IsWhitespace(ch) && !IsLetter(ch) && !IsDigit(ch);
     }
@@ -148,7 +150,7 @@ namespace
 
         while (position < text.size())
         {
-            bool contractionFound = false;
+            bool contractionFound{};
 
             for (const std::string_view contraction : contractions)
             {
@@ -261,11 +263,12 @@ namespace
 
 bool SmolLM2Tokenizer::Load(const std::filesystem::path& path)
 {
+    const auto start = std::chrono::steady_clock::now();
     using namespace simdjson;
 
     ondemand::parser parser;
-    const padded_string json = padded_string::load(path.string());
-    ondemand::document tokenizerJson = parser.iterate(json);
+    const auto json = padded_string::load(path.string());
+    auto tokenizerJson = parser.iterate(json);
 
     m_Tokens.clear();
     m_MergeRanks.clear();
@@ -303,6 +306,9 @@ bool SmolLM2Tokenizer::Load(const std::filesystem::path& path)
         m_MergeRanks.emplace(MergeKey(merge.substr(0, separator), merge.substr(separator + 1)), rank++);
     }
 
+    spdlog::info("[tokenizer] loaded: vocabulary={}, merges={}, added tokens={}, {:.2f} ms", m_Tokens.size(),
+                 m_MergeRanks.size(), m_AddedTokens.size(),
+                 std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
     return true;
 }
 
@@ -320,7 +326,7 @@ std::vector<std::int32_t> SmolLM2Tokenizer::Encode(std::string_view text) const
             std::vector<std::string> symbols(piece.size());
 
             for (std::size_t i{}; i < symbols.size(); ++i)
-                symbols[i] = byteEncoder[piece[i]];
+                symbols[i] = byteEncoder[static_cast<unsigned char>(piece[i])];
 
             while (symbols.size() > 1)
             {

@@ -3,7 +3,7 @@
 #include <bit>
 #include <execution>
 #include <fstream>
-#include <iostream>
+#include <chrono>
 #include <span>
 #include <string>
 #include <string_view>
@@ -12,6 +12,8 @@
 #include "SmolLM2Config.hpp"
 #include "Backend/IBackend.hpp"
 #include "Utils/Utils.hpp"
+#include "Model/ITokenizer.hpp"
+#include "spdlog/spdlog.h"
 
 std::string_view SmolLM2Model::Architecture() const noexcept
 {
@@ -20,6 +22,18 @@ std::string_view SmolLM2Model::Architecture() const noexcept
 
 namespace
 {
+    std::string ShapeString(const std::vector<std::size_t>& shape)
+    {
+        std::string result{"["};
+        for (std::size_t index{}; index < shape.size(); ++index)
+        {
+            if (index != 0)
+                result += ", ";
+            result += std::to_string(shape[index]);
+        }
+        return result + ']';
+    }
+
     void CreateAndUploadTensor(IBackend& backend, Tensor& tensor, std::ifstream& file, std::uint64_t headerSize,
                                std::uint64_t startOffset, std::uint64_t endOffset,
                                const std::vector<std::size_t>& shape)
@@ -42,12 +56,22 @@ namespace
 
 bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
 {
+    const auto loadStart = std::chrono::steady_clock::now();
     Config = SmolLM2Config::Load(path / "config.json");
+    spdlog::info(
+        "[model] SmolLM2: dtype={}, vocab={}, layers={}, hidden={}, intermediate={}, heads={}/{}, head dim={}, query={}, KV={}, context={}, rope theta={}, rms eps={}, tied embeddings={}",
+        Config.torchDtype, Config.vocabSize, Config.numHiddenLayers, Config.hiddenSize, Config.intermediateSize,
+        Config.numAttentionHeads, Config.numKeyValueHeads, Config.headDimension, Config.querySize,
+        Config.keyValueSize, Config.maxPositionEmbeddings, Config.ropeTheta, Config.rmsNormEps,
+        Config.tieWordEmbeddings);
 
     m_Layers.resize(Config.numHiddenLayers);
 
     if (std::ifstream file(path / "model.safetensors", std::ios::binary); file)
     {
+        const auto modelFile = path / "model.safetensors";
+        spdlog::info("[model] loading weights: {} ({:.2f} MiB)", modelFile.string(),
+                     static_cast<double>(std::filesystem::file_size(modelFile)) / (1024.0 * 1024.0));
         std::uint64_t headerSize{};
         file.read(reinterpret_cast<char*>(&headerSize), 8);
 
@@ -59,9 +83,12 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
 
         if (auto error = parser.iterate(json_buffer.data(), headerSize, json_buffer.size()).get(doc))
         {
-            std::cerr << error << '\n';
+            spdlog::error("[model] invalid safetensors header: {}", simdjson::error_message(error));
             return false;
         }
+
+        std::size_t tensorCount{};
+        std::uint64_t weightBytes{};
 
         for (auto root = doc.get_object(); auto field : root)
         {
@@ -69,19 +96,25 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
 
             if (tensorName == "__metadata__") continue;
 
-            simdjson::ondemand::object tensorInfoJson = field.value().get_object();
+            ++tensorCount;
 
-            simdjson::ondemand::array offsetsJson = tensorInfoJson["data_offsets"].get_array();
+            auto tensorInfoJson = field.value().get_object();
+
+            auto offsetsJson = tensorInfoJson["data_offsets"].get_array();
             auto offsetsIt = offsetsJson.begin();
             const std::uint64_t startOffset = (*offsetsIt).get_uint64();
             const std::uint64_t endOffset = (*++offsetsIt).get_uint64();
+            weightBytes += endOffset - startOffset;
 
-            simdjson::ondemand::array shapeJson = tensorInfoJson["shape"].get_array();
+            auto shapeJson = tensorInfoJson["shape"].get_array();
 
             std::vector<std::size_t> shape{};
             shape.reserve(shapeJson.count_elements());
             for (auto shapeData : shapeJson)
                 shape.emplace_back(static_cast<std::size_t>(shapeData.get_uint64()));
+
+            spdlog::debug("[model] tensor: {} shape={} bytes={}", tensorName, ShapeString(shape),
+                          endOffset - startOffset);
 
             std::uint8_t currentLayer{};
             if (auto pos2 = tensorName.find('.', 13); pos2 != std::string::npos)
@@ -169,7 +202,7 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
 
         for (std::size_t position{}; position < Config.maxPositionEmbeddings; ++position)
         {
-            backend.PreCalc(
+            backend.SinCosRoPE(
                 m_RopeCos,
                 m_RopeSin,
                 position,
@@ -203,12 +236,18 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
         }
 
         if (tokenizer->Load(path / "tokenizer.json"))
+        {
+            const auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - loadStart).count();
+            spdlog::info("[model] loaded {} tensors, {:.2f} MiB weights in {:.2f} s", tensorCount,
+                         static_cast<double>(weightBytes) / (1024.0 * 1024.0), elapsed);
             return true;
+        }
 
+        spdlog::error("[model] failed to load tokenizer");
         return false;
     }
 
-    std::cerr << "Failed to open model file" << '\n';
+    spdlog::error("[model] failed to open {}", (path / "model.safetensors").string());
 
     return false;
 }
@@ -216,11 +255,10 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
 void SmolLM2Model::Reset()
 {
     m_Position = 0;
+    spdlog::debug("[model] KV cache reset");
 }
 
-void SmolLM2Model::Prefill(
-    std::span<const std::int32_t> tokenIds,
-    IBackend& backend)
+void SmolLM2Model::Prefill(std::span<const std::int32_t> tokenIds, IBackend& backend)
 {
     if (tokenIds.size() > Config.maxPositionEmbeddings - m_Position)
         throw std::out_of_range("Maximum context length exceeded");

@@ -21,6 +21,7 @@ TEST(Float16Tests, RoundTripsRepresentativeValues)
     {
         const auto half = Utils::Converters::Float32ToFloat16(value);
         const auto roundTrip = Utils::Converters::Float16ToFloat32(half);
+        
         EXPECT_EQ(roundTrip, value);
     }
 }

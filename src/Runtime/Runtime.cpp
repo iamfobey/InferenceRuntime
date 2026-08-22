@@ -12,6 +12,7 @@
 #include "Utils/Utils.hpp"
 #include "spdlog/spdlog.h"
 
+// TODO: Add runtime options. Runtime class will create and owns model/backend, not entry point main
 Runtime::Runtime(std::unique_ptr<IBackend> backend, std::unique_ptr<IModel> model) : m_Backend(std::move(backend)),
     m_Model(std::move(model))
 {

@@ -35,13 +35,12 @@ namespace Math
         }
     }
 
-    void Linear(const std::uint16_t* pMatrix, const float* pInput, float* pOutput, std::size_t rows,
-                std::size_t columns)
+    void LinearRange(const std::uint16_t* pMatrix, const float* pInput, float* pOutput, std::size_t beginRow,
+                     size_t endRow, std::size_t columns)
     {
-#pragma omp parallel for
-        for (std::int64_t row = 0; row < static_cast<std::int64_t>(rows); ++row)
+        for (std::size_t row = beginRow; row < endRow; ++row)
         {
-            const auto* matrixRow = pMatrix + static_cast<std::size_t>(row) * columns;
+            const auto* matrixRow = pMatrix + row * columns;
 
 #if HAVE_AVX2_SUPPORT
             auto accumulator1 = _mm256_setzero_ps();

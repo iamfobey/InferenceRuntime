@@ -7,10 +7,6 @@
 #include <utility>
 #include <vector>
 
-#if HAVE_OPENMP_SUPPORT
-#include <omp.h>
-#endif
-
 #include "Backend/CPU/Buffer.hpp"
 #include "Math/Math.hpp"
 #include "Utils/Utils.hpp"
@@ -18,16 +14,12 @@
 #include "spdlog/spdlog.h"
 
 CpuBackend::CpuBackend(const CpuBackendOptions options) :
-    m_Options(options)
+    m_Options(options),
+    m_ThreadPool(options.threadCount <= 0 ? 1 : static_cast<std::size_t>(options.threadCount))
 {
-    if (m_Options.threadCount == 0)
-        m_Options.threadCount = 1;
-#if HAVE_OPENMP_SUPPORT
-    omp_set_dynamic(0);
-    omp_set_num_threads(m_Options.threadCount);
-#endif
-    spdlog::info("[cpu] backend initialized: threads={}, OpenMP={}, AVX2={}", m_Options.threadCount,
-                 HAVE_OPENMP_SUPPORT, HAVE_AVX2_SUPPORT);
+    m_Options.threadCount = static_cast<int>(m_ThreadPool.ThreadCount());
+
+    spdlog::info("[cpu] backend initialized: threads={}, AVX2={}", m_Options.threadCount,HAVE_AVX2_SUPPORT);
 }
 
 DeviceType CpuBackend::Device() const noexcept
@@ -144,7 +136,14 @@ void CpuBackend::Linear(const Tensor& W, const Tensor& x, Tensor& y)
     if (Utils::ElementCount(y.shape) != matRows)
         throw std::invalid_argument("y element count must equal W matRows");
 
-    Math::Linear(W.Float16Data(), x.FloatData(), y.FloatData(), matRows, matColumns);
+
+    m_ThreadPool.ParallelFor(0, matRows,
+                             [&](auto beginRow, auto endRow)
+                             {
+                                 Math::LinearRange(W.Float16Data(), x.FloatData(), y.FloatData(), beginRow, endRow,
+                                                   matColumns);
+                             }
+    );
 }
 
 void CpuBackend::RMSNorm(const Tensor& x, const Tensor& weight, float epsilon, Tensor& y)

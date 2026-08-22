@@ -2,7 +2,7 @@
 
 Experimental C++20 CPU runtime for the SmolLM2 architecture. It loads a
 Hugging Face-compatible model directory and executes `float32`/`float16`
-inference with OpenMP and optional AVX2/FMA/F16C acceleration.
+inference and optional AVX2/FMA/F16C acceleration.
 
 ## Supported build environments
 
@@ -24,7 +24,7 @@ Install these tools in every environment you use:
 - a C++20 compiler: MSVC on Windows, GCC or Clang in WSL;
 - Ninja for Windows MSVC builds; `make` for WSL builds.
 
-OpenMP and AVX2 are enabled by default. The accelerated build requires a CPU
+AVX2 are enabled by default. The accelerated build requires a CPU
 with AVX2, FMA, and F16C support.
 
 ## Dependency management
@@ -60,7 +60,7 @@ Replace `release` with `debug` or `relwithdebinfo` when needed.
 Pass CMake cache variables during configuration:
 
 ```powershell
-cmake --preset release-msvc -DENABLE_OPENMP=OFF -DENABLE_AVX2=OFF
+cmake --preset release-msvc -DENABLE_AVX2=OFF
 cmake --build --preset release-msvc
 ```
 

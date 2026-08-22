@@ -21,7 +21,7 @@ TEST(Float16Tests, RoundTripsRepresentativeValues)
     {
         const auto half = Utils::Converters::Float32ToFloat16(value);
         const auto roundTrip = Utils::Converters::Float16ToFloat32(half);
-        
+
         EXPECT_EQ(roundTrip, value);
     }
 }
@@ -49,7 +49,7 @@ TEST(LinearTests, CalculatesExpectedValues)
 
     std::array<float, J> y{};
 
-    Math::Linear(W.data(), x.data(), y.data(), J, K);
+    Math::LinearRange(W.data(), x.data(), y.data(), 0, J, K);
 
     EXPECT_NEAR(y[0], 140.0f, 1e-5f);
     EXPECT_NEAR(y[1], 320.0f, 1e-5f);

@@ -8,8 +8,8 @@ namespace Math
     void Embedding(const std::uint16_t* pEmbeddingTable, const std::int32_t* pTokenIds, float* pOutput,
                    size_t tokenCount, size_t vocabularySize, size_t hiddenSize);
 
-    void Linear(const std::uint16_t* pMatrix, const float* pInput, float* pOutput, std::size_t rows,
-                std::size_t columns);
+    void LinearRange(const std::uint16_t* pMatrix, const float* pInput, float* pOutput, std::size_t beginRow,
+                size_t endRow, std::size_t columns);
 
     void RMSNorm(const float* pX, const std::uint16_t* pWeight, float epsilon, float* pY, size_t elementCount);
 

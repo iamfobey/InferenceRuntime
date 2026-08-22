@@ -9,11 +9,9 @@ project(InferenceRuntime LANGUAGES CXX)
 include(CheckCXXCompilerFlag)
 include(CTest)
 
-option(ENABLE_OPENMP "Enable OpenMP" ON)
 option(ENABLE_AVX2 "Enable AVX2" ON)
 option(BUILD_BENCHMARKS "Build runtime benchmarks" ON)
 
-set(HAVE_OPENMP_SUPPORT 0)
 set(HAVE_AVX2_SUPPORT 0)
 
 file(GLOB_RECURSE RUNTIME_SOURCES CONFIGURE_DEPENDS
@@ -34,12 +32,6 @@ target_compile_features(runtime_core PUBLIC cxx_std_20)
 find_package(simdjson CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 target_link_libraries(runtime_core PRIVATE simdjson::simdjson PUBLIC spdlog::spdlog)
-
-if (ENABLE_OPENMP)
-    find_package(OpenMP REQUIRED)
-    target_link_libraries(runtime_core PRIVATE OpenMP::OpenMP_CXX)
-    set(HAVE_OPENMP_SUPPORT 1)
-endif ()
 
 if (ENABLE_AVX2)
     file(GLOB AVX2_SOURCES
@@ -73,7 +65,6 @@ if (ENABLE_AVX2)
 endif ()
 
 target_compile_definitions(runtime_core PUBLIC
-        HAVE_OPENMP_SUPPORT=${HAVE_OPENMP_SUPPORT}
         HAVE_AVX2_SUPPORT=${HAVE_AVX2_SUPPORT}
 )
 
@@ -102,6 +93,5 @@ if (BUILD_BENCHMARKS)
     target_link_libraries(RuntimeBenchmark PRIVATE runtime_core benchmark::benchmark)
 endif ()
 
-message(STATUS "OpenMP: ${HAVE_OPENMP_SUPPORT}")
 message(STATUS "AVX2: ${HAVE_AVX2_SUPPORT}")
 message(STATUS "Benchmark: ${BUILD_BENCHMARKS}")

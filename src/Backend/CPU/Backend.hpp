@@ -5,6 +5,8 @@
 #include <span>
 #include <vector>
 
+#include "Core/ThreadPool.hpp"
+
 struct CpuBackendOptions
 {
     int threadCount{1};
@@ -53,4 +55,5 @@ public:
 
 private:
     CpuBackendOptions m_Options;
+    ThreadPool m_ThreadPool;
 };

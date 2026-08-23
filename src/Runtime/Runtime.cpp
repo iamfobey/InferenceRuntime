@@ -9,15 +9,30 @@
 #include <vector>
 
 #include "Model/ITokenizer.hpp"
+#include "Model/ModelFactory.hpp"
 #include "Utils/Utils.hpp"
 #include "spdlog/spdlog.h"
 
-// TODO: Add runtime options. Runtime class will create and owns model/backend, not entry point main
-Runtime::Runtime(std::unique_ptr<IBackend> backend, std::unique_ptr<IModel> model) : m_Backend(std::move(backend)),
-    m_Model(std::move(model))
+Runtime::Runtime(const RuntimeOptions& options)
 {
-    spdlog::info("[runtime] created: backend={}, model={}", m_Backend ? "available" : "missing",
-                 m_Model ? m_Model->Architecture() : "missing");
+    m_Model = ModelFactory::Create(options.modelArchitecture);
+
+    if (options.backendDriver == "cpu")
+        m_Backend = std::make_unique<CpuBackend>(options.cpuBackendOptions);
+    else
+        spdlog::error("[runtime] unsupported {} backend", options.backendDriver);
+
+    if (!m_Model)
+    {
+        spdlog::error("[runtime] unsupported model architecture: {}", options.modelArchitecture);
+
+        return;
+    }
+
+    if (!m_Backend)
+    {
+        spdlog::error("[runtime] failed to create {} backend", options.backendDriver);
+    }
 }
 
 bool Runtime::LoadModel(const std::string& path)
@@ -156,6 +171,16 @@ std::string_view Runtime::ModelArchitecture() const noexcept
     }
 
     return m_Model->Architecture();
+}
+
+const std::unique_ptr<IBackend>& Runtime::GetBackend() const noexcept
+{
+    return m_Backend;
+}
+
+const std::unique_ptr<IModel>& Runtime::GetModel() const noexcept
+{
+    return m_Model;
 }
 
 std::int32_t Runtime::SampleGreedy() const

@@ -9,12 +9,21 @@
 #include <string_view>
 #include <vector>
 
+#include "Backend/CPU/Backend.hpp"
+
 class ITokenizer;
+
+struct RuntimeOptions
+{
+    std::string_view modelArchitecture;
+    std::string backendDriver;
+    CpuBackendOptions cpuBackendOptions;
+};
 
 class Runtime
 {
 public:
-    Runtime(std::unique_ptr<IBackend> backend, std::unique_ptr<IModel> model);
+    Runtime(const RuntimeOptions& options);
 
     [[nodiscard]]
     bool LoadModel(const std::string& path);
@@ -35,6 +44,12 @@ public:
 
     [[nodiscard]]
     std::string_view ModelArchitecture() const noexcept;
+
+    [[nodiscard]]
+    const std::unique_ptr<IBackend>& GetBackend() const noexcept;
+
+    [[nodiscard]]
+    const std::unique_ptr<IModel>& GetModel() const noexcept;
 
 private:
     [[nodiscard]]

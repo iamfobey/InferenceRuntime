@@ -21,30 +21,16 @@ namespace
     constexpr std::size_t BenchmarkIterations = 10;
     constexpr std::int32_t BenchmarkToken = 1;
 
-    struct RuntimeBenchmarkOptions
-    {
-        std::string architecture;
-        std::string modelPath;
-        int threadCount;
-    };
-
-    void BenchmarkModelLoad(benchmark::State& state, const RuntimeBenchmarkOptions& options)
+    void BenchmarkModelLoad(benchmark::State& state, const RuntimeOptions& options,
+                            const std::filesystem::path& modelPath)
     {
         for (auto _ : state)
         {
-            auto model = ModelFactory::Create(options.architecture);
+            Runtime runtime(options);
 
-            if (!model)
-            {
-                state.SkipWithError("Unsupported model architecture: " + options.architecture);
-                return;
-            }
-
-            auto backend = std::make_unique<CpuBackend>(CpuBackendOptions{.threadCount = options.threadCount});
-            Runtime runtime(std::move(backend), std::move(model));
             const auto start = std::chrono::steady_clock::now();
 
-            if (!runtime.LoadModel(options.modelPath))
+            if (!runtime.LoadModel(modelPath))
             {
                 state.SkipWithError("Failed to load model");
                 return;
@@ -54,55 +40,41 @@ namespace
         }
     }
 
-    void BenchmarkGenerationTG300(benchmark::State& state, const RuntimeBenchmarkOptions& options)
+    void BenchmarkGenerationTG300(benchmark::State& state, const RuntimeOptions& options,
+                                  const std::filesystem::path& modelPath)
     {
-        auto model = ModelFactory::Create(options.architecture);
+        Runtime runtime(options);
 
-        if (!model)
-        {
-            state.SkipWithError("Unsupported model architecture: " + options.architecture);
-            return;
-        }
-
-        auto* const modelPointer = model.get();
-
-        const CpuBackendOptions backendOptions = {
-            .threadCount = options.threadCount
-        };
-
-        auto backend = std::make_unique<CpuBackend>(backendOptions);
-
-        auto* const backendPointer = backend.get();
-
-        Runtime runtime(std::move(backend), std::move(model));
-
-        if (!runtime.LoadModel(options.modelPath))
+        if (!runtime.LoadModel(modelPath))
         {
             state.SkipWithError("Failed to load model");
             return;
         }
 
-        modelPointer->Reset();
+        const auto& model = runtime.GetModel();
+        const auto& backend = runtime.GetBackend();
+
+        model->Reset();
 
         for (std::size_t i{}; i < 8; ++i)
-            modelPointer->DecodeStep(BenchmarkToken, *backendPointer);
+            model->DecodeStep(BenchmarkToken, *backend);
 
-        benchmark::DoNotOptimize(modelPointer->Logits().FloatData());
+        benchmark::DoNotOptimize(model->Logits().FloatData());
 
-        modelPointer->Reset();
+        model->Reset();
 
         for (auto _ : state)
         {
-            modelPointer->Reset();
+            model->Reset();
 
             const auto start = std::chrono::steady_clock::now();
 
             for (std::size_t i = 0; i < GenerationTokens; ++i)
-                modelPointer->DecodeStep(BenchmarkToken, *backendPointer);
+                model->DecodeStep(BenchmarkToken, *backend);
 
             const auto end = std::chrono::steady_clock::now();
 
-            benchmark::DoNotOptimize(modelPointer->Logits().FloatData());
+            benchmark::DoNotOptimize(model->Logits().FloatData());
 
             const std::chrono::duration<double> elapsed = end - start;
 
@@ -125,10 +97,12 @@ int main(const int argc, char** argv)
         return 1;
     }
 
-    const RuntimeBenchmarkOptions options = {
-        .architecture = argv[1],
-        .modelPath = argv[2],
-        .threadCount = std::atoi(argv[3])
+    RuntimeOptions options = {
+        .modelArchitecture = argv[1],
+        .backendDriver = "cpu",
+        .cpuBackendOptions = {
+            .threadCount = std::atoi(argv[3])
+        }
     };
 
     std::vector benchmarkArguments = {argv[0]};
@@ -147,7 +121,8 @@ int main(const int argc, char** argv)
     benchmark::RegisterBenchmark(
             "ModelLoad",
             BenchmarkModelLoad,
-            options)
+            options,
+            argv[2])
         ->Iterations(BenchmarkIterations)
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond);
@@ -155,7 +130,8 @@ int main(const int argc, char** argv)
     benchmark::RegisterBenchmark(
             "GenerationTG300",
             BenchmarkGenerationTG300,
-            options)
+            options,
+            argv[2])
         ->Iterations(BenchmarkIterations)
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond);

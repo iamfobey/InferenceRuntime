@@ -29,22 +29,13 @@ int main(const int argc, char** argv)
 
     try
     {
-        auto model = ModelFactory::Create(architecture);
-
-        if (!model)
-        {
-            spdlog::error("Unsupported model architecture: {}", architecture);
-
-            return 1;
-        }
-
-        CpuBackendOptions backendOptions = {
-            .threadCount = std::atoi(threadCount)
-        };
-
-        auto backend = std::make_unique<CpuBackend>(backendOptions);
-
-        Runtime runtime(std::move(backend), std::move(model));
+        Runtime runtime({
+            .modelArchitecture = architecture,
+            .backendDriver = "cpu",
+            .cpuBackendOptions = {
+                .threadCount = std::atoi(threadCount)
+            }
+        });
 
         if (!runtime.LoadModel(modelPath))
         {

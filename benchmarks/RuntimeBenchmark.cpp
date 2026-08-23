@@ -19,7 +19,7 @@ namespace
     constexpr std::int32_t BenchmarkToken = 1;
 
     void BenchmarkModelLoad(benchmark::State& state, const RuntimeOptions& options,
-                            const std::filesystem::path& modelPath)
+                            const std::string& modelPath)
     {
         for (auto _ : state)
         {
@@ -38,7 +38,7 @@ namespace
     }
 
     void BenchmarkGenerationTG300(benchmark::State& state, const RuntimeOptions& options,
-                                  const std::filesystem::path& modelPath)
+                                  const std::string& modelPath)
     {
         Runtime runtime(options);
 

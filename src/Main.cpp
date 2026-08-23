@@ -1,12 +1,10 @@
 ﻿#include "Backend/CPU/Backend.hpp"
 #include "Model/IModel.hpp"
 #include "Runtime/Runtime.hpp"
-#include "Model/ModelFactory.hpp"
 #include "Model/ITokenizer.hpp"
 #include "spdlog/spdlog.h"
 
 #include <iostream>
-#include <memory>
 #include <string>
 
 int main(const int argc, char** argv)

@@ -9,7 +9,7 @@ namespace Math
                    size_t tokenCount, size_t vocabularySize, size_t hiddenSize);
 
     void LinearRange(const std::uint16_t* pMatrix, const float* pInput, float* pOutput, std::size_t beginRow,
-                size_t endRow, std::size_t columns);
+                     size_t endRow, std::size_t columns);
 
     void RMSNorm(const float* pX, const std::uint16_t* pWeight, float epsilon, float* pY, size_t elementCount);
 

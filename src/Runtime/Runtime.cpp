@@ -5,7 +5,6 @@
 #include <string>
 #include <string_view>
 #include <chrono>
-#include <utility>
 #include <vector>
 
 #include "Model/ITokenizer.hpp"

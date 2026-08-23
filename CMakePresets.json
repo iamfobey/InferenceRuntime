@@ -100,19 +100,73 @@
     }
   ],
   "buildPresets": [
-    { "name": "debug-msvc", "configurePreset": "debug-msvc" },
-    { "name": "relwithdebinfo-msvc", "configurePreset": "relwithdebinfo-msvc" },
-    { "name": "release-msvc", "configurePreset": "release-msvc" },
-    { "name": "debug-wsl", "configurePreset": "debug-wsl" },
-    { "name": "relwithdebinfo-wsl", "configurePreset": "relwithdebinfo-wsl" },
-    { "name": "release-wsl", "configurePreset": "release-wsl" }
+    {
+      "name": "debug-msvc",
+      "configurePreset": "debug-msvc"
+    },
+    {
+      "name": "relwithdebinfo-msvc",
+      "configurePreset": "relwithdebinfo-msvc"
+    },
+    {
+      "name": "release-msvc",
+      "configurePreset": "release-msvc"
+    },
+    {
+      "name": "debug-wsl",
+      "configurePreset": "debug-wsl"
+    },
+    {
+      "name": "relwithdebinfo-wsl",
+      "configurePreset": "relwithdebinfo-wsl"
+    },
+    {
+      "name": "release-wsl",
+      "configurePreset": "release-wsl"
+    }
   ],
   "testPresets": [
-    { "name": "debug-msvc", "configurePreset": "debug-msvc", "output": { "outputOnFailure": true } },
-    { "name": "relwithdebinfo-msvc", "configurePreset": "relwithdebinfo-msvc", "output": { "outputOnFailure": true } },
-    { "name": "release-msvc", "configurePreset": "release-msvc", "output": { "outputOnFailure": true } },
-    { "name": "debug-wsl", "configurePreset": "debug-wsl", "output": { "outputOnFailure": true } },
-    { "name": "relwithdebinfo-wsl", "configurePreset": "relwithdebinfo-wsl", "output": { "outputOnFailure": true } },
-    { "name": "release-wsl", "configurePreset": "release-wsl", "output": { "outputOnFailure": true } }
+    {
+      "name": "debug-msvc",
+      "configurePreset": "debug-msvc",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "relwithdebinfo-msvc",
+      "configurePreset": "relwithdebinfo-msvc",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "release-msvc",
+      "configurePreset": "release-msvc",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "debug-wsl",
+      "configurePreset": "debug-wsl",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "relwithdebinfo-wsl",
+      "configurePreset": "relwithdebinfo-wsl",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "release-wsl",
+      "configurePreset": "release-wsl",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
   ]
 }

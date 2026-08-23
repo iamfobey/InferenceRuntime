@@ -19,7 +19,7 @@ CpuBackend::CpuBackend(const CpuBackendOptions options) :
 {
     m_Options.threadCount = static_cast<int>(m_ThreadPool.ThreadCount());
 
-    spdlog::info("[cpu] backend initialized: threads={}, AVX2={}", m_Options.threadCount,HAVE_AVX2_SUPPORT);
+    spdlog::info("[cpu] backend initialized: threads={}, AVX2={}", m_Options.threadCount, HAVE_AVX2_SUPPORT);
 }
 
 DeviceType CpuBackend::Device() const noexcept

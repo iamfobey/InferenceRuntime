@@ -47,7 +47,7 @@ TEST(LinearTests, CalculatesExpectedValues)
         30.0f
     };
 
-    std::array<float, J> y{};
+    std::array < float, J > y{};
 
     Math::LinearRange(W.data(), x.data(), y.data(), 0, J, K);
 

@@ -27,7 +27,7 @@ namespace Math
     void RoPE(float* pSource, const float* pInputCos, const float* pInputSin, size_t headCount,
               size_t headDimension);
 
-    void Attention(const float* pQ, const float* pKCache, const float* pVCache, float* pOutput, float* scores,
+    void Attention(const float* pQ, const float* pKCache, const float* pVCache, float* pOutput,
                    size_t validTokenCount, size_t attentionHeadCount, size_t keyValueHeadCount, size_t headDimension);
 
     void CopyToCache(const float* pSource, float* pCache, size_t position, size_t elementCount);

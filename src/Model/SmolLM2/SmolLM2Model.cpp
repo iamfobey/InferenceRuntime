@@ -210,7 +210,6 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
                 static_cast<float>(Config.ropeTheta));
         }
 
-        m_AttentionScores = backend.CreateTensor({Config.maxPositionEmbeddings}, DataType::Float32);
         m_AttentionOutput = backend.CreateTensor({Config.numAttentionHeads, Config.headDimension}, DataType::Float32);
         m_AttentionProjected = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
         m_Gate = backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
@@ -296,9 +295,9 @@ void SmolLM2Model::DecodeStep(std::int32_t tokenId, IBackend& backend)
 
         const auto validTokenCount = m_Position + 1;
 
-        backend.Attention(m_Query, m_KeyCaches[layerIndex], m_ValueCaches[layerIndex], m_AttentionScores,
-                          validTokenCount,
-                          Config.numAttentionHeads, Config.numKeyValueHeads, m_AttentionOutput);
+        backend.Attention(m_Query, m_KeyCaches[layerIndex], m_ValueCaches[layerIndex], validTokenCount,
+                          Config.numAttentionHeads,
+                          Config.numKeyValueHeads, m_AttentionOutput);
         backend.Linear(selfAttnO, m_AttentionOutput, m_AttentionProjected);
         backend.Add(m_Hidden, m_AttentionProjected, m_NextHidden);
 

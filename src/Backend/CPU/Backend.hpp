@@ -45,7 +45,7 @@ public:
     void RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inputSin, std::size_t headCount,
               size_t position, std::size_t headDimension) override;
 
-    void Attention(const Tensor& q, const Tensor& kCache, const Tensor& vCache, Tensor& scores,
+    void Attention(const Tensor& q, const Tensor& kCache, const Tensor& vCache,
                    size_t validTokenCount, size_t attentionHeadCount, size_t keyValueHeadCount,
                    Tensor& output) override;
 

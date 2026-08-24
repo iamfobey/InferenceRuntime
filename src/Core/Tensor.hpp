@@ -28,7 +28,4 @@ struct Tensor
 
     [[nodiscard]]
     std::uint16_t* Float16Data() const;
-
-    [[nodiscard]]
-    bool IsContiguous() const;
 };

@@ -207,7 +207,7 @@ namespace Math
     }
 
     void Attention(const float* pQ, const float* pKCache, const float* pVCache, float* pOutput,
-                   float* scores, size_t validTokenCount,
+                   size_t validTokenCount,
                    size_t attentionHeadCount, size_t keyValueHeadCount,
                    size_t headDimension)
     {
@@ -224,36 +224,43 @@ namespace Math
         {
             const auto kvHead = h / groupSize;
             const auto qOffset = h * headDimension;
-            auto maximumScore = -std::numeric_limits<float>::infinity();
-
-            for (std::size_t t{}; t < validTokenCount; ++t)
-            {
-                const auto kOffset = (t * keyValueHeadCount + kvHead) * headDimension;
-                float score_h_t{};
-                for (std::size_t d{}; d < headDimension; ++d)
-                    score_h_t += pQ[qOffset + d] * pKCache[kOffset + d];
-                score_h_t *= scale;
-                scores[t] = score_h_t;
-                maximumScore = std::fmaxf(maximumScore, score_h_t);
-            }
-
-            const auto outputOffset = h * headDimension;
-            for (std::size_t d{}; d < headDimension; ++d)
-                pOutput[outputOffset + d] = 0.0f;
+            auto currentMaximumScore = -std::numeric_limits<float>::infinity();
 
             float probabilitySum{};
+            float oldMaximumScore{};
+
+            for (std::size_t d{}; d < headDimension; ++d)
+                pOutput[qOffset + d] = 0.0f;
+
             for (std::size_t t{}; t < validTokenCount; ++t)
             {
-                const auto e = std::exp(scores[t] - maximumScore);
-                probabilitySum += e;
-                const auto vOffset = (t * keyValueHeadCount + kvHead) * headDimension;
+                const auto kvOffset = (t * keyValueHeadCount + kvHead) * headDimension;
+                float score{};
+
                 for (std::size_t d{}; d < headDimension; ++d)
-                    pOutput[outputOffset + d] += e * pVCache[vOffset + d];
+                    score += pQ[qOffset + d] * pKCache[kvOffset + d];
+
+                score *= scale;
+                oldMaximumScore = currentMaximumScore;
+                currentMaximumScore = std::fmax(currentMaximumScore, score);
+
+                const auto exp = std::exp(score - currentMaximumScore);
+                const auto correction = std::exp(oldMaximumScore - currentMaximumScore);
+
+                (probabilitySum *= correction) += exp;
+
+                for (std::size_t d{}; d < headDimension; ++d)
+                {
+                    auto& pOut = pOutput[qOffset + d];
+                    pOut *= correction;
+                    pOut += exp * pVCache[kvOffset + d];
+                }
             }
 
             const auto inverseProbabilitySum = 1.0f / probabilitySum;
+
             for (std::size_t d{}; d < headDimension; ++d)
-                pOutput[outputOffset + d] *= inverseProbabilitySum;
+                pOutput[qOffset + d] *= inverseProbabilitySum;
         }
     }
 

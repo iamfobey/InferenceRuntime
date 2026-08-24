@@ -33,8 +33,7 @@ Tensor CpuBackend::CreateTensor(std::vector<size_t> shape, DataType dataType)
     Tensor tensor = {
         .shape = std::move(shape),
         .strides = Utils::CreateContiguousStrides(tensor.shape),
-        .buffer = std::make_shared<CpuBuffer>(
-            bytes),
+        .buffer = std::make_shared<CpuBuffer>(bytes),
         .byteOffset = 0,
         .dataType = dataType,
     };
@@ -238,14 +237,13 @@ void CpuBackend::RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inpu
 }
 
 void CpuBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor& vCache,
-                           Tensor& scores, size_t validTokenCount,
+                           size_t validTokenCount,
                            size_t attentionHeadCount, size_t keyValueHeadCount, Tensor& output)
 {
     q.Validate(DeviceType::CPU, DataType::Float32);
     kCache.Validate(DeviceType::CPU, DataType::Float32);
     vCache.Validate(DeviceType::CPU, DataType::Float32);
     output.Validate(DeviceType::CPU, DataType::Float32);
-    scores.Validate(DeviceType::CPU, DataType::Float32);
 
     if (attentionHeadCount == 0 || keyValueHeadCount == 0)
         throw std::invalid_argument("Attention head counts must be positive");
@@ -275,8 +273,8 @@ void CpuBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor& 
         throw std::invalid_argument("Cache shape does not match Attention parameters");
 
     Math::Attention(q.FloatData(), kCache.FloatData(), vCache.FloatData(), output.FloatData(),
-                    scores.FloatData(),
-                    validTokenCount, attentionHeadCount, keyValueHeadCount, headDimension);
+                    validTokenCount,
+                    attentionHeadCount, keyValueHeadCount, headDimension);
 }
 
 void CpuBackend::CopyToCache(const Tensor& source, Tensor& cache, size_t position)

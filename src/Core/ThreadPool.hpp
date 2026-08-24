@@ -257,9 +257,6 @@ private:
 
     void WaitForCompletion(CompletionState& state);
 
-    [[nodiscard]]
-    bool InParallelRegion() const noexcept;
-
     std::size_t m_ThreadCount;
     std::size_t m_WorkerCount;
     std::size_t m_SpinCount;
@@ -288,7 +285,7 @@ void ThreadPool::ParallelFor(std::size_t begin, std::size_t end, Function&& func
 
     const auto workSize = end - begin;
 
-    if (m_ThreadCount == 1 || workSize <= grainSize || InParallelRegion())
+    if (m_ThreadCount == 1 || workSize <= grainSize || s_CurrentPool == this || s_ParallelDepth != 0)
     {
         function(begin, end);
         return;
@@ -350,6 +347,6 @@ void ThreadPool::ParallelFor(std::size_t begin, std::size_t end, Function&& func
 
     WaitForCompletion(completion);
 
-    if (auto exception = completion.Exception())
+    if (const auto& exception = completion.Exception())
         std::rethrow_exception(exception);
 }

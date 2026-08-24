@@ -149,16 +149,16 @@ bool ThreadPool::TryExecuteOne(std::size_t preferredWorkerIndex)
 
 bool ThreadPool::TryPopLocal(std::size_t workerIndex, Task& task)
 {
-    auto& queue = *m_Queues[workerIndex];
+    auto& [mutex, tasks] = *m_Queues[workerIndex];
 
-    std::lock_guard lock(queue.mutex);
+    std::lock_guard lock(mutex);
 
-    if (queue.tasks.empty())
+    if (tasks.empty())
         return false;
 
-    task = std::move(queue.tasks.back());
+    task = std::move(tasks.back());
 
-    queue.tasks.pop_back();
+    tasks.pop_back();
 
     m_QueuedTaskCount.fetch_sub(1, std::memory_order_acq_rel);
 
@@ -179,16 +179,16 @@ bool ThreadPool::TrySteal(std::size_t thiefWorkerIndex, Task& task)
         if (queueIndex == thiefWorkerIndex)
             continue;
 
-        auto& queue = *m_Queues[queueIndex];
+        auto& [mutex, tasks] = *m_Queues[queueIndex];
 
-        std::unique_lock lock(queue.mutex, std::try_to_lock);
+        const std::unique_lock lock(mutex, std::try_to_lock);
 
-        if (!lock || queue.tasks.empty())
+        if (!lock || tasks.empty())
             continue;
 
-        task = std::move(queue.tasks.front());
+        task = std::move(tasks.front());
 
-        queue.tasks.pop_front();
+        tasks.pop_front();
 
         m_QueuedTaskCount.fetch_sub(1, std::memory_order_acq_rel);
 
@@ -212,9 +212,4 @@ void ThreadPool::WaitForCompletion(CompletionState& state)
 
         state.remaining.wait(remaining, std::memory_order_acquire);
     }
-}
-
-bool ThreadPool::InParallelRegion() const noexcept
-{
-    return s_CurrentPool == this || s_ParallelDepth != 0;
 }

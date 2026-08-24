@@ -112,13 +112,13 @@ reports elapsed time and tokens per second.
 Windows:
 
 ```powershell
-.\build\msvc-release\RuntimeBenchmark.exe smollm2 C:\models\SmolLM2-135M 1
+.\build\msvc-release\RuntimeBenchmark.exe smollm2 C:\models\SmolLM2-135M 1 --benchmark_repetitions=10
 ```
 
 WSL:
 
 ```bash
-./build/wsl-release/RuntimeBenchmark smollm2 /mnt/c/models/SmolLM2-135M 1
+./build/wsl-release/RuntimeBenchmark smollm2 /mnt/c/models/SmolLM2-135M 1 --benchmark_repetitions=10
 ```
 
 ## Troubleshooting
@@ -135,4 +135,3 @@ WSL:
 
 - CPU execution only;
 - greedy (`argmax`) sampling only;
-- demo thread count is currently provided on the command line.

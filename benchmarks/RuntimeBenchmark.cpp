@@ -14,8 +14,7 @@
 
 namespace
 {
-    constexpr std::size_t GenerationTokens = 300;
-    constexpr std::size_t BenchmarkIterations = 10;
+    constexpr std::size_t GenerationTokens = 128;
     constexpr std::int32_t BenchmarkToken = 1;
 
     void BenchmarkModelLoad(benchmark::State& state, const RuntimeOptions& options,
@@ -120,7 +119,6 @@ int main(const int argc, char** argv)
             BenchmarkModelLoad,
             options,
             argv[2])
-        ->Iterations(BenchmarkIterations)
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond);
 
@@ -129,7 +127,6 @@ int main(const int argc, char** argv)
             BenchmarkGenerationTG300,
             options,
             argv[2])
-        ->Iterations(BenchmarkIterations)
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond);
 

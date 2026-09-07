@@ -36,8 +36,8 @@ namespace
         }
     }
 
-    void BenchmarkGenerationTG300(benchmark::State& state, const RuntimeOptions& options,
-                                  const std::string& modelPath)
+    void BenchmarkGenerationTG(benchmark::State& state, const RuntimeOptions& options,
+                               const std::string& modelPath)
     {
         Runtime runtime(options);
 
@@ -123,8 +123,8 @@ int main(const int argc, char** argv)
         ->Unit(benchmark::kMillisecond);
 
     benchmark::RegisterBenchmark(
-            "GenerationTG300",
-            BenchmarkGenerationTG300,
+            "GenerationTG",
+            BenchmarkGenerationTG,
             options,
             argv[2])
         ->UseManualTime()

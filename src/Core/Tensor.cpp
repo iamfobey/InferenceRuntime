@@ -46,3 +46,26 @@ std::uint16_t* Tensor::Float16Data() const
 
     return reinterpret_cast<std::uint16_t*>(static_cast<std::byte*>(buffer->Data()) + byteOffset);
 }
+
+Tensor Tensor::View(std::size_t offset, std::size_t count) const
+{
+    return View(offset, std::vector{count});
+}
+
+Tensor Tensor::View(std::size_t offset, std::vector<std::size_t> viewShape) const
+{
+    const auto elementCount = Utils::ElementCount(shape);
+
+    if (offset > elementCount || Utils::ElementCount(viewShape) > elementCount - offset)
+        throw std::out_of_range("Tensor view exceeds source tensor");
+
+    Tensor result{
+        .shape = std::move(viewShape),
+        .strides = Utils::CreateContiguousStrides(result.shape),
+        .buffer = buffer,
+        .byteOffset = byteOffset + Math::CheckedMultiply(offset, Utils::DataTypeSize(dataType)),
+        .dataType = dataType,
+    };
+
+    return result;
+}

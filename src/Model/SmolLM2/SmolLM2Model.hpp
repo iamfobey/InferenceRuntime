@@ -35,10 +35,8 @@ private:
         Tensor gateProj;
         Tensor upProj;
         Tensor postAttentionLayernorm;
-        Tensor selfAttnK;
+        Tensor selfAttnQKV;
         Tensor selfAttnO;
-        Tensor selfAttnQ;
-        Tensor selfAttnV;
     };
 
     Tensor m_TokenEmbedding;
@@ -49,13 +47,11 @@ private:
     Tensor m_NextHidden;
     Tensor m_Normalized;
 
-    Tensor m_Query;
-    Tensor m_Key;
-    Tensor m_Value;
+    Tensor m_QKV;
 
     Tensor m_RopeCos;
     Tensor m_RopeSin;
-    
+
     Tensor m_AttentionOutput;
     Tensor m_AttentionProjected;
 

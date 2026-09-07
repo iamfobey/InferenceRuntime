@@ -34,12 +34,10 @@ namespace
         return result + ']';
     }
 
-    void CreateAndUploadTensor(IBackend& backend, Tensor& tensor, std::ifstream& file, std::uint64_t headerSize,
-                               std::uint64_t startOffset, std::uint64_t endOffset,
-                               const std::vector<std::size_t>& shape)
+    void UploadTensor(IBackend& backend, Tensor& tensor, std::ifstream& file, std::uint64_t headerSize,
+                      std::uint64_t startOffset, std::uint64_t endOffset,
+                      const std::vector<std::size_t>& shape)
     {
-        tensor = backend.CreateTensor(shape, DataType::Float16);
-
         std::vector<std::uint16_t> rawData(Utils::ElementCount(shape));
 
         file.seekg(static_cast<std::streamoff>(8 + headerSize + startOffset));
@@ -51,6 +49,15 @@ namespace
             data[i] = std::bit_cast<float>(static_cast<std::uint32_t>(rawData[i]) << 16);
 
         backend.Upload(tensor, data);
+    }
+
+    void CreateAndUploadTensor(IBackend& backend, Tensor& tensor, std::ifstream& file, std::uint64_t headerSize,
+                               std::uint64_t startOffset, std::uint64_t endOffset,
+                               const std::vector<std::size_t>& shape)
+    {
+        tensor = backend.CreateTensor(shape, DataType::Float16);
+
+        UploadTensor(backend, tensor, file, headerSize, startOffset, endOffset, shape);
     }
 }
 
@@ -66,6 +73,11 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
         Config.tieWordEmbeddings);
 
     m_Layers.resize(Config.numHiddenLayers);
+    for (auto& layer : m_Layers)
+    {
+        layer.selfAttnQKV = backend.CreateTensor({Config.querySize + 2 * Config.keyValueSize, Config.hiddenSize},
+                                                 DataType::Float16);
+    }
 
     if (std::ifstream file(path / "model.safetensors", std::ios::binary); file)
     {
@@ -161,34 +173,44 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
                                       startOffset, endOffset,
                                       shape);
             }
-            else if (tensorName == makeTensorName("self_attn.k_proj"))
-            {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].selfAttnK, file, headerSize, startOffset,
-                                      endOffset, shape);
-            }
-            else if (tensorName == makeTensorName("self_attn.o_proj"))
-            {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].selfAttnO, file, headerSize, startOffset,
-                                      endOffset, shape);
-            }
             else if (tensorName == makeTensorName("self_attn.q_proj"))
             {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].selfAttnQ, file, headerSize, startOffset,
-                                      endOffset, shape);
+                auto q = m_Layers[currentLayer].selfAttnQKV.View(0, Config.querySize * Config.hiddenSize);
+                UploadTensor(backend, q, file, headerSize, startOffset, endOffset, shape);
+            }
+            else if (tensorName == makeTensorName("self_attn.k_proj"))
+            {
+                auto k = m_Layers[currentLayer].selfAttnQKV.View(
+                    Config.querySize * Config.hiddenSize,
+                    Config.keyValueSize * Config.hiddenSize);
+
+                UploadTensor(backend, k, file, headerSize, startOffset, endOffset, shape);
             }
             else if (tensorName == makeTensorName("self_attn.v_proj"))
             {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].selfAttnV, file, headerSize, startOffset,
-                                      endOffset, shape);
+                auto v = m_Layers[currentLayer].selfAttnQKV.View(
+                    (Config.querySize + Config.keyValueSize) * Config.hiddenSize,
+                    Config.keyValueSize * Config.hiddenSize);
+
+                UploadTensor(backend, v, file, headerSize, startOffset, endOffset, shape);
+            }
+            else if (tensorName == makeTensorName("self_attn.o_proj"))
+            {
+                CreateAndUploadTensor(
+                    backend,
+                    m_Layers[currentLayer].selfAttnO,
+                    file,
+                    headerSize,
+                    startOffset,
+                    endOffset,
+                    shape);
             }
         }
 
         m_Hidden = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
         m_NextHidden = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
         m_Normalized = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
-        m_Query = backend.CreateTensor({Config.numAttentionHeads, Config.headDimension}, DataType::Float32);
-        m_Key = backend.CreateTensor({Config.numKeyValueHeads, Config.headDimension}, DataType::Float32);
-        m_Value = backend.CreateTensor({Config.numKeyValueHeads, Config.headDimension}, DataType::Float32);
+        m_QKV = backend.CreateTensor({Config.querySize + 2 * Config.keyValueSize}, DataType::Float32);
 
         const auto halfDimension = Config.headDimension / 2;
 
@@ -280,22 +302,26 @@ void SmolLM2Model::DecodeStep(std::int32_t tokenId, IBackend& backend)
 
     for (std::size_t layerIndex{}; layerIndex < m_Layers.size(); ++layerIndex)
     {
-        auto& [layernorm, downProj, gateProj, upProj, postAttentionLayernorm, selfAttnK, selfAttnO, selfAttnQ,
-                selfAttnV]
-            = m_Layers[layerIndex];
+        auto& [layernorm, downProj, gateProj, upProj, postAttentionLayernorm, selfAttnQKV, selfAttnO] = m_Layers[
+            layerIndex];
+
+        auto query = m_QKV.View(0, {Config.numAttentionHeads, Config.headDimension});
+
+        auto key = m_QKV.View(Config.querySize, {Config.numKeyValueHeads, Config.headDimension});
+
+        auto value = m_QKV.View(Config.querySize + Config.keyValueSize,
+                                {Config.numKeyValueHeads, Config.headDimension});
 
         backend.RMSNorm(m_Hidden, layernorm, static_cast<float>(Config.rmsNormEps), m_Normalized);
-        backend.Linear(selfAttnQ, m_Normalized, m_Query);
-        backend.Linear(selfAttnK, m_Normalized, m_Key);
-        backend.Linear(selfAttnV, m_Normalized, m_Value);
-        backend.RoPE(m_Query, m_RopeCos, m_RopeSin, Config.numAttentionHeads, m_Position, Config.headDimension);
-        backend.RoPE(m_Key, m_RopeCos, m_RopeSin, Config.numKeyValueHeads, m_Position, Config.headDimension);
-        backend.CopyToCache(m_Key, m_KeyCaches[layerIndex], m_Position);
-        backend.CopyToCache(m_Value, m_ValueCaches[layerIndex], m_Position);
+        backend.Linear(selfAttnQKV, m_Normalized, m_QKV);
+        backend.RoPE(query, m_RopeCos, m_RopeSin, Config.numAttentionHeads, m_Position, Config.headDimension);
+        backend.RoPE(key, m_RopeCos, m_RopeSin, Config.numKeyValueHeads, m_Position, Config.headDimension);
+        backend.CopyToCache(key, m_KeyCaches[layerIndex], m_Position);
+        backend.CopyToCache(value, m_ValueCaches[layerIndex], m_Position);
 
         const auto validTokenCount = m_Position + 1;
 
-        backend.Attention(m_Query, m_KeyCaches[layerIndex], m_ValueCaches[layerIndex], validTokenCount,
+        backend.Attention(query, m_KeyCaches[layerIndex], m_ValueCaches[layerIndex], validTokenCount,
                           Config.numAttentionHeads,
                           Config.numKeyValueHeads, m_AttentionOutput);
         backend.Linear(selfAttnO, m_AttentionOutput, m_AttentionProjected);

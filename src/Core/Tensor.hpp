@@ -28,4 +28,10 @@ struct Tensor
 
     [[nodiscard]]
     std::uint16_t* Float16Data() const;
+
+    [[nodiscard]]
+    Tensor View(std::size_t offset, std::vector<std::size_t> viewShape) const;
+
+    [[nodiscard]]
+    Tensor View(std::size_t offset, std::size_t count) const;
 };

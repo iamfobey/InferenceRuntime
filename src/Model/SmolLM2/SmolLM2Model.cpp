@@ -66,7 +66,7 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
     const auto loadStart = std::chrono::steady_clock::now();
     Config = SmolLM2Config::Load(path / "config.json");
     spdlog::info(
-        "[model] SmolLM2: dtype={}, vocab={}, layers={}, hidden={}, intermediate={}, heads={}/{}, head dim={}, query={}, KV={}, context={}, rope theta={}, rms eps={}, tied embeddings={}",
+        "[model] SmolLM2: dtype={}, vocab={}, layers={}, hidden={}, intermediate={}, heads={}/{}, head dim={}, m_Query={}, KV={}, context={}, rope theta={}, rms eps={}, tied embeddings={}",
         Config.torchDtype, Config.vocabSize, Config.numHiddenLayers, Config.hiddenSize, Config.intermediateSize,
         Config.numAttentionHeads, Config.numKeyValueHeads, Config.headDimension, Config.querySize,
         Config.keyValueSize, Config.maxPositionEmbeddings, Config.ropeTheta, Config.rmsNormEps,
@@ -77,6 +77,7 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
     {
         layer.selfAttnQKV = backend.CreateTensor({Config.querySize + 2 * Config.keyValueSize, Config.hiddenSize},
                                                  DataType::Float16);
+        layer.gateUpProj = backend.CreateTensor({Config.intermediateSize * 2, Config.hiddenSize}, DataType::Float16);
     }
 
     if (std::ifstream file(path / "model.safetensors", std::ios::binary); file)
@@ -159,13 +160,14 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
             }
             else if (tensorName == makeTensorName("mlp.gate_proj"))
             {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].gateProj, file, headerSize, startOffset,
-                                      endOffset, shape);
+                auto gate = m_Layers[currentLayer].gateUpProj.View(0, {Config.intermediateSize, Config.hiddenSize});
+                UploadTensor(backend, gate, file, headerSize, startOffset, endOffset, shape);
             }
             else if (tensorName == makeTensorName("mlp.up_proj"))
             {
-                CreateAndUploadTensor(backend, m_Layers[currentLayer].upProj, file, headerSize, startOffset, endOffset,
-                                      shape);
+                auto up = m_Layers[currentLayer].gateUpProj.View(Config.intermediateSize * Config.hiddenSize,
+                                                                 {Config.intermediateSize, Config.hiddenSize});
+                UploadTensor(backend, up, file, headerSize, startOffset, endOffset, shape);
             }
             else if (tensorName == makeTensorName("post_attention_layernorm"))
             {
@@ -212,6 +214,13 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
         m_Normalized = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
         m_QKV = backend.CreateTensor({Config.querySize + 2 * Config.keyValueSize}, DataType::Float32);
 
+        m_Query = m_QKV.View(0, {Config.numAttentionHeads, Config.headDimension});
+
+        m_Key = m_QKV.View(Config.querySize, {Config.numKeyValueHeads, Config.headDimension});
+
+        m_Value = m_QKV.View(Config.querySize + Config.keyValueSize,
+                             {Config.numKeyValueHeads, Config.headDimension});
+
         const auto halfDimension = Config.headDimension / 2;
 
         m_RopeCos = backend.CreateTensor(
@@ -234,8 +243,9 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
 
         m_AttentionOutput = backend.CreateTensor({Config.numAttentionHeads, Config.headDimension}, DataType::Float32);
         m_AttentionProjected = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
-        m_Gate = backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
-        m_Up = backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
+        m_GateUp = backend.CreateTensor({Config.intermediateSize * 2}, DataType::Float32);
+        m_Gate = m_GateUp.View(0, Config.intermediateSize);
+        m_Up = m_GateUp.View(Config.intermediateSize, Config.intermediateSize);
         m_ActivatedGate = backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
         m_FeedForward = backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
         m_DownOutput = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
@@ -302,26 +312,19 @@ void SmolLM2Model::DecodeStep(std::int32_t tokenId, IBackend& backend)
 
     for (std::size_t layerIndex{}; layerIndex < m_Layers.size(); ++layerIndex)
     {
-        auto& [layernorm, downProj, gateProj, upProj, postAttentionLayernorm, selfAttnQKV, selfAttnO] = m_Layers[
+        auto& [layernorm, downProj, gateUpProj, postAttentionLayernorm, selfAttnQKV, selfAttnO] = m_Layers[
             layerIndex];
-
-        auto query = m_QKV.View(0, {Config.numAttentionHeads, Config.headDimension});
-
-        auto key = m_QKV.View(Config.querySize, {Config.numKeyValueHeads, Config.headDimension});
-
-        auto value = m_QKV.View(Config.querySize + Config.keyValueSize,
-                                {Config.numKeyValueHeads, Config.headDimension});
 
         backend.RMSNorm(m_Hidden, layernorm, static_cast<float>(Config.rmsNormEps), m_Normalized);
         backend.Linear(selfAttnQKV, m_Normalized, m_QKV);
-        backend.RoPE(query, m_RopeCos, m_RopeSin, Config.numAttentionHeads, m_Position, Config.headDimension);
-        backend.RoPE(key, m_RopeCos, m_RopeSin, Config.numKeyValueHeads, m_Position, Config.headDimension);
-        backend.CopyToCache(key, m_KeyCaches[layerIndex], m_Position);
-        backend.CopyToCache(value, m_ValueCaches[layerIndex], m_Position);
+        backend.RoPE(m_Query, m_RopeCos, m_RopeSin, Config.numAttentionHeads, m_Position, Config.headDimension);
+        backend.RoPE(m_Key, m_RopeCos, m_RopeSin, Config.numKeyValueHeads, m_Position, Config.headDimension);
+        backend.CopyToCache(m_Key, m_KeyCaches[layerIndex], m_Position);
+        backend.CopyToCache(m_Value, m_ValueCaches[layerIndex], m_Position);
 
         const auto validTokenCount = m_Position + 1;
 
-        backend.Attention(query, m_KeyCaches[layerIndex], m_ValueCaches[layerIndex], validTokenCount,
+        backend.Attention(m_Query, m_KeyCaches[layerIndex], m_ValueCaches[layerIndex], validTokenCount,
                           Config.numAttentionHeads,
                           Config.numKeyValueHeads, m_AttentionOutput);
         backend.Linear(selfAttnO, m_AttentionOutput, m_AttentionProjected);
@@ -330,8 +333,7 @@ void SmolLM2Model::DecodeStep(std::int32_t tokenId, IBackend& backend)
         std::swap(m_Hidden, m_NextHidden);
 
         backend.RMSNorm(m_Hidden, postAttentionLayernorm, static_cast<float>(Config.rmsNormEps), m_Normalized);
-        backend.Linear(gateProj, m_Normalized, m_Gate);
-        backend.Linear(upProj, m_Normalized, m_Up);
+        backend.Linear(gateUpProj, m_Normalized, m_GateUp);
         backend.SiLU(m_Gate, m_ActivatedGate);
         backend.Multiply(m_ActivatedGate, m_Up, m_FeedForward);
         backend.Linear(downProj, m_FeedForward, m_DownOutput);

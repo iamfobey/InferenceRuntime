@@ -32,8 +32,7 @@ private:
     {
         Tensor layernorm;
         Tensor downProj;
-        Tensor gateProj;
-        Tensor upProj;
+        Tensor gateUpProj;
         Tensor postAttentionLayernorm;
         Tensor selfAttnQKV;
         Tensor selfAttnO;
@@ -47,7 +46,11 @@ private:
     Tensor m_NextHidden;
     Tensor m_Normalized;
 
+    // QKV fuse, 3 tensors cache to avoid allocs in runtime
     Tensor m_QKV;
+    Tensor m_Query;
+    Tensor m_Key;
+    Tensor m_Value;
 
     Tensor m_RopeCos;
     Tensor m_RopeSin;
@@ -55,8 +58,11 @@ private:
     Tensor m_AttentionOutput;
     Tensor m_AttentionProjected;
 
+    // Gate + Up fuse, 2 tensors cache to avoid allocs in runtime
+    Tensor m_GateUp;
     Tensor m_Gate;
     Tensor m_Up;
+
     Tensor m_ActivatedGate;
     Tensor m_FeedForward;
     Tensor m_DownOutput;

@@ -21,7 +21,7 @@ public:
     DeviceType Device() const noexcept override;
 
     [[nodiscard]]
-    Tensor CreateTensor(std::vector<size_t> shape, DataType dataType) override;
+    Tensor CreateTensor(TensorDimVec shape, DataType dataType) override;
 
     void Upload(Tensor& destination, std::span<const float> source) override;
 

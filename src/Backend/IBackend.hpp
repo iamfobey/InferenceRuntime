@@ -14,7 +14,7 @@ public:
     virtual DeviceType Device() const noexcept = 0;
 
     [[nodiscard]]
-    virtual Tensor CreateTensor(std::vector<size_t> shape, DataType dataType) = 0;
+    virtual Tensor CreateTensor(TensorDimVec, DataType dataType) = 0;
 
     virtual void Upload(Tensor& destination, std::span<const float> source) = 0;
 

@@ -22,7 +22,7 @@ std::string_view SmolLM2Model::Architecture() const noexcept
 
 namespace
 {
-    std::string ShapeString(const std::vector<std::size_t>& shape)
+    std::string ShapeString(const TensorDimVec& shape)
     {
         std::string result{"["};
         for (std::size_t index{}; index < shape.size(); ++index)
@@ -36,7 +36,7 @@ namespace
 
     void UploadTensor(IBackend& backend, Tensor& tensor, std::ifstream& file, std::uint64_t headerSize,
                       std::uint64_t startOffset, std::uint64_t endOffset,
-                      const std::vector<std::size_t>& shape)
+                      const TensorDimVec& shape)
     {
         std::vector<std::uint16_t> rawData(Utils::ElementCount(shape));
 
@@ -53,7 +53,7 @@ namespace
 
     void CreateAndUploadTensor(IBackend& backend, Tensor& tensor, std::ifstream& file, std::uint64_t headerSize,
                                std::uint64_t startOffset, std::uint64_t endOffset,
-                               const std::vector<std::size_t>& shape)
+                               const TensorDimVec& shape)
     {
         tensor = backend.CreateTensor(shape, DataType::Float16);
 
@@ -120,7 +120,7 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
 
             auto shapeJson = tensorInfoJson["shape"].get_array();
 
-            std::vector<std::size_t> shape{};
+            TensorDimVec shape{};
             shape.reserve(shapeJson.count_elements());
             for (auto shapeData : shapeJson)
                 shape.emplace_back(static_cast<std::size_t>(shapeData.get_uint64()));

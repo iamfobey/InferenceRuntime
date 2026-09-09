@@ -1,9 +1,6 @@
 ﻿#pragma once
 
-#include <stdexcept>
-#include <vector>
-
-enum class DataType : std::uint8_t;
+#include "Core/Core.hpp"
 
 namespace Utils
 {
@@ -11,8 +8,8 @@ namespace Utils
     std::size_t DataTypeSize(DataType dataType);
 
     [[nodiscard]]
-    std::vector<std::size_t> CreateContiguousStrides(const std::vector<std::size_t>& shape);
+    TensorDimVec CreateContiguousStrides(const TensorDimVec& shape);
 
     [[nodiscard]]
-    std::size_t ElementCount(const std::vector<std::size_t>& shape) noexcept;
+    std::size_t ElementCount(const TensorDimVec& shape) noexcept;
 }

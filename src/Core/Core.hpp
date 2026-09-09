@@ -1,6 +1,7 @@
-#pragma once
+﻿#pragma once
 
 #include <cstdint>
+#include "ankerl/svector.h"
 
 enum class DeviceType : std::uint8_t
 {
@@ -14,4 +15,4 @@ enum class DataType : std::uint8_t
     Float32
 };
 
-
+using TensorDimVec = ankerl::svector<std::size_t, 4>;

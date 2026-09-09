@@ -2,7 +2,6 @@
 
 #include <stdexcept>
 
-#include "Core/Enums.hpp"
 #include "Math/Math.hpp"
 
 namespace Utils
@@ -21,9 +20,9 @@ namespace Utils
     }
 
     [[nodiscard]]
-    std::vector<std::size_t> CreateContiguousStrides(const std::vector<std::size_t>& shape)
+    TensorDimVec CreateContiguousStrides(const TensorDimVec& shape)
     {
-        std::vector<std::size_t> strides(shape.size());
+        TensorDimVec strides(shape.size());
 
         std::size_t stride = 1;
 
@@ -38,7 +37,7 @@ namespace Utils
         return strides;
     }
 
-    std::size_t ElementCount(const std::vector<std::size_t>& shape) noexcept
+    std::size_t ElementCount(const TensorDimVec& shape) noexcept
     {
         std::size_t count = 1;
 

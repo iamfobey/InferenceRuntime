@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "Enums.hpp"
+#include "Core/Core.hpp"
 
 #include <cstddef>
 

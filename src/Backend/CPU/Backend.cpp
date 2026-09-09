@@ -27,7 +27,7 @@ DeviceType CpuBackend::Device() const noexcept
     return DeviceType::CPU;
 }
 
-Tensor CpuBackend::CreateTensor(std::vector<size_t> shape, DataType dataType)
+Tensor CpuBackend::CreateTensor(TensorDimVec shape, DataType dataType)
 {
     const auto bytes = Math::CheckedMultiply(Utils::ElementCount(shape), Utils::DataTypeSize(dataType));
     Tensor tensor = {

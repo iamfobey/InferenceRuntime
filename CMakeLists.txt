@@ -31,7 +31,9 @@ target_compile_features(runtime_core PUBLIC cxx_std_20)
 
 find_package(simdjson CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
-target_link_libraries(runtime_core PRIVATE simdjson::simdjson PUBLIC spdlog::spdlog)
+find_package(svector)
+
+target_link_libraries(runtime_core PRIVATE simdjson::simdjson PUBLIC spdlog::spdlog svector::svector)
 
 if (ENABLE_AVX2)
     file(GLOB AVX2_SOURCES

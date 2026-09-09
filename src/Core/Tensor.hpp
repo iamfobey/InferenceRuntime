@@ -1,8 +1,7 @@
 #pragma once
 
-#include "Enums.hpp"
 #include "IBuffer.hpp"
-#include "Math/Math.hpp"
+#include "Core/Core.hpp"
 
 #include <memory>
 #include <string>
@@ -12,8 +11,8 @@ struct Tensor
 {
     std::string tensorName = "Tensor";
 
-    std::vector<std::size_t> shape;
-    std::vector<std::size_t> strides;
+    TensorDimVec shape;
+    TensorDimVec strides;
 
     std::shared_ptr<IBuffer> buffer;
 
@@ -30,7 +29,7 @@ struct Tensor
     std::uint16_t* Float16Data() const;
 
     [[nodiscard]]
-    Tensor View(std::size_t offset, std::vector<std::size_t> viewShape) const;
+    Tensor View(std::size_t offset, TensorDimVec viewShape) const;
 
     [[nodiscard]]
     Tensor View(std::size_t offset, std::size_t count) const;

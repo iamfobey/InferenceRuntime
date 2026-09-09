@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 
+#include "Math/Math.hpp"
 #include "spdlog/spdlog.h"
 #include "Utils/Utils.hpp"
 
@@ -49,10 +50,10 @@ std::uint16_t* Tensor::Float16Data() const
 
 Tensor Tensor::View(std::size_t offset, std::size_t count) const
 {
-    return View(offset, std::vector{count});
+    return View(offset, TensorDimVec{count});
 }
 
-Tensor Tensor::View(std::size_t offset, std::vector<std::size_t> viewShape) const
+Tensor Tensor::View(std::size_t offset, TensorDimVec viewShape) const
 {
     const auto elementCount = Utils::ElementCount(shape);
 

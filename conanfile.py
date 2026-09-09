@@ -9,6 +9,7 @@ class InferenceRuntimeConan(ConanFile):
         "gtest/1.17.0",
         "benchmark/1.9.5",
         "spdlog/1.17.0",
+        "svector/1.0.3",
     )
     default_options = {"spdlog/*:use_std_fmt": False}
 

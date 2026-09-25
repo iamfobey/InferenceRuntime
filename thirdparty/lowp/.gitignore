@@ -1,0 +1,11 @@
+﻿build/
+cmake-build-*/
+out/
+.vscode/
+.idea/
+compile_commands.json
+*.user
+*.suo
+*.VC.db
+*.VC.VC.opendb
+.DS_Store

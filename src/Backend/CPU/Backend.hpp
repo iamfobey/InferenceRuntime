@@ -3,7 +3,6 @@
 #include "Backend/IBackend.hpp"
 
 #include <span>
-#include <vector>
 
 #include "Core/ThreadPool.hpp"
 
@@ -29,17 +28,17 @@ public:
 
     void Embedding(const Tensor& embeddingTable, std::span<const std::int32_t> tokenIds, Tensor& output) override;
 
-    void Linear(const Tensor& W, const Tensor& x, Tensor& y) override;
+    void Linear(const Tensor& weights, const Tensor& input, Tensor& output) override;
 
-    void RMSNorm(const Tensor& x, const Tensor& weight, float epsilon, Tensor& y) override;
+    void RMSNorm(const Tensor& input, const Tensor& weight, float epsilon, Tensor& output) override;
 
-    void Add(const Tensor& a, const Tensor& b, Tensor& output) override;
+    void Add(const Tensor& inputA, const Tensor& inputB, Tensor& output) override;
 
-    void Multiply(const Tensor& a, const Tensor& b, Tensor& output) override;
+    void Multiply(const Tensor& inputA, const Tensor& inputB, Tensor& output) override;
 
-    void SiLU(const Tensor& x, Tensor& output) override;
+    void SiLU(const Tensor& input, Tensor& output) override;
 
-    void SinCosRoPE(Tensor& sourceCos, Tensor& sourceSin, std::size_t position, std::size_t headDimension,
+    void ComputeRoPECosSin(Tensor& sourceCos, Tensor& sourceSin, std::size_t position, std::size_t headDimension,
                     float theta) override;
 
     void RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inputSin, std::size_t headCount,

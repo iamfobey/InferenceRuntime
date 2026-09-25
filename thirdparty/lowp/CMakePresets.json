@@ -1,0 +1,74 @@
+﻿{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "dev",
+      "displayName": "Developer Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/dev",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "LOWP_BUILD_TESTS": "ON",
+        "LOWP_INSTALL": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "LOWP_BUILD_TESTS": "ON",
+        "LOWP_INSTALL": "ON"
+      }
+    },
+    {
+      "name": "library-only",
+      "displayName": "Library only",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/library-only",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "LOWP_BUILD_TESTS": "OFF",
+        "LOWP_INSTALL": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "library-only",
+      "configurePreset": "library-only"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

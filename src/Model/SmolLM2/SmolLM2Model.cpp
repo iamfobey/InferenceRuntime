@@ -107,7 +107,8 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
         {
             const std::string_view tensorName = field.unescaped_key();
 
-            if (tensorName == "__metadata__") continue;
+            if (tensorName == "__metadata__")
+                continue;
 
             ++tensorCount;
 
@@ -233,7 +234,7 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
 
         for (std::size_t position{}; position < Config.maxPositionEmbeddings; ++position)
         {
-            backend.SinCosRoPE(
+            backend.ComputeRoPECosSin(
                 m_RopeCos,
                 m_RopeSin,
                 position,

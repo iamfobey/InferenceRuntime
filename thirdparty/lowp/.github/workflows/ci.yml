@@ -1,0 +1,31 @@
+﻿name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -DLOWP_BUILD_TESTS=ON -DLOWP_INSTALL=ON
+
+      - name: Build
+        run: cmake --build build --config Debug
+
+      - name: Test
+        run: ctest --test-dir build -C Debug --output-on-failure
+
+      - name: Check single header
+        run: cmake --build build --target lowp-check-single-header --config Debug
+
+      - name: Install
+        run: cmake --install build --config Debug --prefix install

@@ -14,6 +14,8 @@ option(BUILD_BENCHMARKS "Build runtime benchmarks" ON)
 
 set(HAVE_AVX2_SUPPORT 0)
 
+add_subdirectory(./thirdparty/lowp)
+
 file(GLOB_RECURSE RUNTIME_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
@@ -33,7 +35,7 @@ find_package(simdjson CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(svector)
 
-target_link_libraries(runtime_core PRIVATE simdjson::simdjson PUBLIC spdlog::spdlog svector::svector)
+target_link_libraries(runtime_core PRIVATE simdjson::simdjson PUBLIC spdlog::spdlog svector::svector lowp::lowp)
 
 if (ENABLE_AVX2)
     file(GLOB AVX2_SOURCES

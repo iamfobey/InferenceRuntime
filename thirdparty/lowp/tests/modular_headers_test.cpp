@@ -4,9 +4,7 @@
 
 TEST(ModularHeaders, PlaceholderTypesCompile)
 {
-    constexpr lowp::float16 f16;
-    
-    static_assert(f16.test() == 0);
-    
-    EXPECT_EQ(lowp::version_major, 0);
+    const lowp::f16 f16{1.0f};
+
+    EXPECT_EQ(f16.SignValue(), 0);
 }

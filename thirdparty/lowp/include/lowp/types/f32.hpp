@@ -11,6 +11,8 @@ namespace lowp
         using type = std::uint32_t;
 
     public:
+        f32() noexcept = default;
+        
         explicit f32(f16 value) noexcept;
         explicit f32(float value) noexcept;
 

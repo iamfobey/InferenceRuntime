@@ -3,18 +3,23 @@
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
-#if HAVE_AVX2_SUPPORT
+#include <type_traits>
+
+#include "Utils/Utils.hpp"
+
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
 #include <immintrin.h>
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 #endif
 
 #include "Math/Math.hpp"
-#include "Utils/Converters.hpp"
-
 #include "lowp/lowp.hpp"
 
 namespace
 {
-#if HAVE_AVX2_SUPPORT
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
     template <class T>
     __m256 Load8AsFloat(const T* source) noexcept
     {
@@ -32,6 +37,8 @@ namespace
         {
             return _mm256_loadu_ps(reinterpret_cast<const float*>(source));
         }
+
+        return _mm256_setzero_ps();
     }
 
     template <class T>
@@ -51,6 +58,67 @@ namespace
             _mm256_storeu_ps(reinterpret_cast<float*>(destination), value);
         }
     }
+
+    template <class Function>
+    void DispatchAccumulatorCount(Function&& function)
+    {
+        static const bool zen3 = Utils::IsZen3();
+
+        if (zen3)
+        {
+            function.template operator()<8>();
+            return;
+        }
+
+        function.template operator()<4>();
+    }
+
+    // TODO: naive realization of std::exp -> normal
+    __m256 exp256_ps(__m256 x)
+    {
+        const auto inv_ln2 = _mm256_set1_ps(1.4426950408889634074f); // 1/ln(2)
+        const auto ln2_hi = _mm256_set1_ps(-0.693145751953125f); // major ln(2)
+        const auto ln2_lo = _mm256_set1_ps(-1.428606820309417232e-7f); // minor ln(2)
+
+        // (^5) for e^r on [-ln(2)/2, ln(2)/2]
+        const auto c0 = _mm256_set1_ps(1.0f);
+        const auto c1 = _mm256_set1_ps(1.0f);
+        const auto c2 = _mm256_set1_ps(0.5f);
+        const auto c3 = _mm256_set1_ps(0.1666666716337204f);
+        const auto c4 = _mm256_set1_ps(0.0416664853692055f);
+        const auto c5 = _mm256_set1_ps(0.0083333607763052f);
+
+        // limits
+        const auto max_exp = _mm256_set1_ps(88.3762626647949f);
+        const auto min_exp = _mm256_set1_ps(-88.3762626647949f);
+        x = _mm256_min_ps(x, max_exp);
+        x = _mm256_max_ps(x, min_exp);
+
+        // n = round(x / ln(2))
+        const auto fx = _mm256_round_ps(_mm256_mul_ps(x, inv_ln2), _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+        const auto n = _mm256_cvtps_epi32(fx);
+
+        // r = x - n * ln(2)
+        __m256 r = _mm256_fmadd_ps(fx, ln2_hi, x);
+        r = _mm256_fmadd_ps(fx, ln2_lo, r);
+
+        // P(r) = c0 + r*(c1 + r*(c2 + r*(c3 + r*(c4 + r*c5))))
+        __m256 p = c5;
+        p = _mm256_fmadd_ps(p, r, c4);
+        p = _mm256_fmadd_ps(p, r, c3);
+        p = _mm256_fmadd_ps(p, r, c2);
+        p = _mm256_fmadd_ps(p, r, c1);
+        p = _mm256_fmadd_ps(p, r, c0);
+
+        // 2^n IEEE 754 float
+        const auto bias = _mm256_set1_epi32(127);
+        const auto twon_bits = _mm256_slli_epi32(_mm256_add_epi32(n, bias), 23);
+        const auto twon = _mm256_castsi256_ps(twon_bits);
+
+        // e^x = P(r) * 2^n
+        return _mm256_mul_ps(p, twon);
+    }
+
 #endif
 }
 
@@ -76,7 +144,7 @@ namespace Math
             const auto destinationOffset = t * hiddenSize;
             std::size_t i{};
 
-#if HAVE_AVX2_SUPPORT
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
             for (; i + 8 <= hiddenSize; i += 8)
                 Store8FromFloat(pOutput + destinationOffset + i, Load8AsFloat(pEmbeddingTable + sourceOffset + i));
 #endif
@@ -95,58 +163,68 @@ namespace Math
     void LinearRange(const WeightType* pMatrix, const InputType* pInput, OutputType* pOutput,
                      std::size_t beginRow, std::size_t endRow, std::size_t columns)
     {
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+        DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
+        {
+            constexpr std::size_t vectorWidth = 8;
+            constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+            for (std::size_t row = beginRow; row < endRow; ++row)
+            {
+                const auto* matrixRow = pMatrix + row * columns;
+                std::size_t column{};
+                float sum{};
+                __m256 accumulators[AccumulatorCount];
+
+                for (auto& accumulator : accumulators)
+                    accumulator = _mm256_setzero_ps();
+
+                for (; column + blockSize <= columns; column += blockSize)
+                {
+                    for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                    {
+                        const auto offset = column + accumulatorIndex * vectorWidth;
+                        const auto input = Load8AsFloat(pInput + offset);
+                        const auto matrix = Load8AsFloat(matrixRow + offset);
+                        accumulators[accumulatorIndex] = _mm256_fmadd_ps(matrix, input, accumulators[accumulatorIndex]);
+                    }
+                }
+
+                auto totalAccumulator = accumulators[0];
+
+                for (std::size_t accumulatorIndex = 1; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                    totalAccumulator = _mm256_add_ps(totalAccumulator, accumulators[accumulatorIndex]);
+
+                const auto hiQuad = _mm256_extractf128_ps(totalAccumulator, 1);
+                const auto loQuad = _mm256_castps256_ps128(totalAccumulator);
+                auto sum128 = _mm_add_ps(loQuad, hiQuad);
+
+                const auto shuf1 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(2, 3, 0, 1));
+                sum128 = _mm_add_ps(sum128, shuf1);
+
+                const auto shuf2 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 0, 3, 2));
+                sum128 = _mm_add_ps(sum128, shuf2);
+
+                _mm_store_ss(&sum, sum128);
+
+                for (; column < columns; ++column)
+                    sum += static_cast<float>(matrixRow[column]) * static_cast<float>(pInput[column]);
+
+                pOutput[row] = static_cast<OutputType>(sum);
+            }
+        });
+#else
         for (std::size_t row = beginRow; row < endRow; ++row)
         {
             const auto* matrixRow = pMatrix + row * columns;
-            std::size_t column{};
             float sum{};
 
-#if HAVE_AVX2_SUPPORT
-            auto accumulator1 = _mm256_setzero_ps();
-            auto accumulator2 = _mm256_setzero_ps();
-            auto accumulator3 = _mm256_setzero_ps();
-            auto accumulator4 = _mm256_setzero_ps();
-
-            for (; column + 32 <= columns; column += 32)
-            {
-                const auto input1 = Load8AsFloat(pInput + column);
-                const auto input2 = Load8AsFloat(pInput + column + 8);
-                const auto input3 = Load8AsFloat(pInput + column + 16);
-                const auto input4 = Load8AsFloat(pInput + column + 24);
-
-                const auto matrix1 = Load8AsFloat(matrixRow + column);
-                const auto matrix2 = Load8AsFloat(matrixRow + column + 8);
-                const auto matrix3 = Load8AsFloat(matrixRow + column + 16);
-                const auto matrix4 = Load8AsFloat(matrixRow + column + 24);
-
-                accumulator1 = _mm256_fmadd_ps(matrix1, input1, accumulator1);
-                accumulator2 = _mm256_fmadd_ps(matrix2, input2, accumulator2);
-                accumulator3 = _mm256_fmadd_ps(matrix3, input3, accumulator3);
-                accumulator4 = _mm256_fmadd_ps(matrix4, input4, accumulator4);
-            }
-
-            const auto accumulator12 = _mm256_add_ps(accumulator1, accumulator2);
-            const auto accumulator34 = _mm256_add_ps(accumulator3, accumulator4);
-            const auto totalAccumulator = _mm256_add_ps(accumulator12, accumulator34);
-
-            const auto hiQuad = _mm256_extractf128_ps(totalAccumulator, 1);
-            const auto loQuad = _mm256_castps256_ps128(totalAccumulator);
-            auto sum128 = _mm_add_ps(loQuad, hiQuad);
-
-            const auto shuf1 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(2, 3, 0, 1));
-            sum128 = _mm_add_ps(sum128, shuf1);
-
-            const auto shuf2 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 0, 3, 2));
-            sum128 = _mm_add_ps(sum128, shuf2);
-
-            _mm_store_ss(&sum, sum128);
-#endif
-
-            for (; column < columns; ++column)
+            for (std::size_t column{}; column < columns; ++column)
                 sum += static_cast<float>(matrixRow[column]) * static_cast<float>(pInput[column]);
 
             pOutput[row] = static_cast<OutputType>(sum);
         }
+#endif
     }
 
     template void LinearRange<lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, lowp::f16*, std::size_t, std::size_t, std::size_t);
@@ -177,7 +255,7 @@ namespace Math
 
         std::size_t i{};
 
-#if HAVE_AVX2_SUPPORT
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
         const auto inverseRmsVec = _mm256_set1_ps(inverseRms);
 
         for (; i + 8 <= elementCount; i += 8)
@@ -206,7 +284,26 @@ namespace Math
     template <class InputAType, class InputBType, class OutputType>
     void Add(const InputAType* pInputA, const InputBType* pInputB, OutputType* pOutput, size_t elementCount)
     {
-        for (std::int64_t i = 0; i < static_cast<std::int64_t>(elementCount); ++i)
+        std::size_t i{};
+
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+        DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
+        {
+            constexpr std::size_t vectorWidth = 8;
+            constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+            for (; i + blockSize <= elementCount; i += blockSize)
+            {
+                for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                {
+                    const auto offset = i + accumulatorIndex * vectorWidth;
+                    Store8FromFloat(pOutput + offset, _mm256_add_ps(Load8AsFloat(pInputA + offset), Load8AsFloat(pInputB + offset)));
+                }
+            }
+        });
+#endif
+
+        for (; i < elementCount; ++i)
             pOutput[i] = static_cast<OutputType>(static_cast<float>(pInputA[i]) + static_cast<float>(pInputB[i]));
     }
 
@@ -222,7 +319,26 @@ namespace Math
     template <class InputAType, class InputBType, class OutputType>
     void Multiply(const InputAType* pInputA, const InputBType* pInputB, OutputType* pOutput, size_t elementCount)
     {
-        for (std::int64_t i = 0; i < static_cast<std::int64_t>(elementCount); ++i)
+        std::size_t i{};
+
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+        DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
+        {
+            constexpr std::size_t vectorWidth = 8;
+            constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+            for (; i + blockSize <= elementCount; i += blockSize)
+            {
+                for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                {
+                    const auto offset = i + accumulatorIndex * vectorWidth;
+                    Store8FromFloat(pOutput + offset, _mm256_mul_ps(Load8AsFloat(pInputA + offset), Load8AsFloat(pInputB + offset)));
+                }
+            }
+        });
+#endif
+
+        for (; i < elementCount; ++i)
             pOutput[i] = static_cast<OutputType>(static_cast<float>(pInputA[i]) * static_cast<float>(pInputB[i]));
     }
 
@@ -246,7 +362,31 @@ namespace Math
     template <class InputType, class OutputType>
     void SiLU(const InputType* pInput, OutputType* pOutput, size_t elementCount)
     {
-        for (std::int64_t i = 0; i < static_cast<std::int64_t>(elementCount); ++i)
+        std::size_t i{};
+
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+        const auto one = _mm256_set1_ps(1.0f);
+        const auto zero = _mm256_setzero_ps();
+
+        DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
+        {
+            constexpr std::size_t vectorWidth = 8;
+            constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+            for (; i + blockSize <= elementCount; i += blockSize)
+            {
+                for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                {
+                    const auto offset = i + accumulatorIndex * vectorWidth;
+                    const auto input = Load8AsFloat(pInput + offset);
+                    const auto exp = exp256_ps(_mm256_sub_ps(zero, input));
+                    Store8FromFloat(pOutput + offset, _mm256_div_ps(input, _mm256_add_ps(one, exp)));
+                }
+            }
+        });
+#endif
+
+        for (; i < elementCount; ++i)
         {
             const auto input = static_cast<float>(pInput[i]);
             pOutput[i] = static_cast<OutputType>(input / (1.0f + std::exp(-input)));

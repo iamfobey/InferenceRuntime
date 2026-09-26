@@ -12,7 +12,6 @@ include(CTest)
 option(ENABLE_AVX2 "Enable AVX2" ON)
 option(BUILD_BENCHMARKS "Build runtime benchmarks" ON)
 
-set(HAVE_AVX2_SUPPORT 0)
 
 add_subdirectory(./thirdparty/lowp)
 
@@ -50,27 +49,19 @@ if (ENABLE_AVX2)
 
         if (COMPILER_SUPPORTS_AVX2)
             set_source_files_properties(${AVX2_SOURCES} PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
-            set(HAVE_AVX2_SUPPORT 1)
         else ()
             message(WARNING "AVX2 requested, but compiler does not support /arch:AVX2")
         endif ()
     else ()
-        check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
-        check_cxx_compiler_flag("-mfma" COMPILER_SUPPORTS_FMA)
-        check_cxx_compiler_flag("-mf16c" COMPILER_SUPPORTS_F16C)
+        check_cxx_compiler_flag("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
 
-        if (COMPILER_SUPPORTS_AVX2 AND COMPILER_SUPPORTS_FMA AND COMPILER_SUPPORTS_F16C)
-            set_source_files_properties(${AVX2_SOURCES} PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma;-mf16c")
-            set(HAVE_AVX2_SUPPORT 1)
+        if (COMPILER_SUPPORTS_MARCH_NATIVE)
+            set_source_files_properties(${AVX2_SOURCES} PROPERTIES COMPILE_OPTIONS "-march=native")
         else ()
-            message(WARNING "AVX2/FMA/F16C requested, but compiler does not support all required flags")
+            message(WARNING "Native CPU optimization requested, but compiler does not support -march=native")
         endif ()
     endif ()
 endif ()
-
-target_compile_definitions(runtime_core PUBLIC
-        HAVE_AVX2_SUPPORT=${HAVE_AVX2_SUPPORT}
-)
 
 add_executable(InferenceRuntime src/Main.cpp)
 
@@ -97,5 +88,5 @@ if (BUILD_BENCHMARKS)
     target_link_libraries(RuntimeBenchmark PRIVATE runtime_core benchmark::benchmark)
 endif ()
 
-message(STATUS "AVX2: ${HAVE_AVX2_SUPPORT}")
+message(STATUS "CPU optimization: ${ENABLE_AVX2}")
 message(STATUS "Benchmark: ${BUILD_BENCHMARKS}")

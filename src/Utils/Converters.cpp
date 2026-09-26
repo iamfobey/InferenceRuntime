@@ -4,7 +4,7 @@
 #include <bit>
 #include <cmath>
 
-#if HAVE_AVX2_SUPPORT
+#if defined(__AVX2__) && (defined(_MSC_VER) || defined(__F16C__))
 #include <immintrin.h>
 #endif
 
@@ -118,7 +118,7 @@ namespace Utils::Converters
     {
         std::size_t i{};
 
-#if HAVE_AVX2_SUPPORT
+#if defined(__AVX2__) && (defined(_MSC_VER) || defined(__F16C__))
         for (; i + 8 <= elementCount; i += 8)
         {
             const auto values = _mm256_loadu_ps(pSrc + i);
@@ -135,7 +135,7 @@ namespace Utils::Converters
     {
         std::size_t i{};
 
-#if HAVE_AVX2_SUPPORT
+#if defined(__AVX2__) && (defined(_MSC_VER) || defined(__F16C__))
         for (; i + 8 <= elementCount; i += 8)
         {
             const auto halfValues = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pSrc + i));

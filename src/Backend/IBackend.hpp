@@ -13,7 +13,7 @@ public:
     virtual DeviceType Device() const noexcept = 0;
 
     [[nodiscard]]
-    virtual Tensor CreateTensor(TensorDimVec, DataType dataType) = 0;
+    virtual Tensor CreateTensor(TensorDimVec shape, DataType dataType) = 0;
 
     virtual void Upload(Tensor& destination, std::span<const float> source) = 0;
 
@@ -29,7 +29,7 @@ public:
 
     virtual void Multiply(const Tensor& inputA, const Tensor& inputB, Tensor& output) = 0;
 
-    virtual void SiLU(const Tensor& input, Tensor& output) = 0;
+    virtual void SwiGLU(const Tensor& input, const Tensor&, Tensor& output) = 0;
 
     virtual void ComputeRoPECosSin(Tensor& sourceCos, Tensor& sourceSin, std::size_t position, std::size_t headDimension,
                                    float theta) = 0;

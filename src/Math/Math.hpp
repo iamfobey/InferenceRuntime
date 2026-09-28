@@ -25,8 +25,8 @@ namespace Math
     [[nodiscard]]
     std::size_t CheckedMultiply(size_t inputA, size_t inputB);
 
-    template <class InputType, class OutputType>
-    void SiLU(const InputType* pInput, OutputType* pOutput, size_t elementCount);
+    template <class InputType, class GateUpType, class OutputType>
+    void SiLU(const InputType* pInput, const GateUpType* pGateUp, OutputType* pOutput, size_t elementCount);
 
     template <class CosType, class SinType>
     void ComputeRoPECosSin(CosType* pSourceCos, SinType* pSourceSin, std::size_t position, std::size_t headDimension, float theta);

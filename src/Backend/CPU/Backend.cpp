@@ -292,26 +292,59 @@ void CpuBackend::Multiply(const Tensor& inputA, const Tensor& inputB, Tensor& ou
     throw std::invalid_argument("Unsupported Multiply data type combination");
 }
 
-void CpuBackend::SiLU(const Tensor& input, Tensor& output)
+void CpuBackend::SwiGLU(const Tensor& input, const Tensor& gateUp, Tensor& output)
 {
     input.Validate(DeviceType::CPU);
+    gateUp.Validate(DeviceType::CPU);
     output.Validate(DeviceType::CPU);
 
-    if (input.shape != output.shape)
-        throw std::invalid_argument("input and output must have equal shapes");
+    if (input.shape != gateUp.shape || input.shape != output.shape)
+        throw std::invalid_argument("input, gateUp and output must have equal shapes");
 
     const auto elementCount = Utils::ElementCount(input.shape);
-    const auto dispatch = [&]<class InputType, class OutputType>()
+
+    const auto dispatch = [&]<class InputType, class GateUpType, class OutputType>()
     {
-        Math::SiLU(input.Data<InputType>(), output.Data<OutputType>(), elementCount);
+        Math::SiLU(
+            input.Data<InputType>(),
+            gateUp.Data<GateUpType>(),
+            output.Data<OutputType>(),
+            elementCount);
     };
 
-    IR_DISPATCH_CASE(input.dataType == DataType::Float16 && output.dataType == DataType::Float16, lowp::f16, lowp::f16)
-    IR_DISPATCH_CASE(input.dataType == DataType::Float16 && output.dataType == DataType::Float32, lowp::f16, lowp::f32)
-    IR_DISPATCH_CASE(input.dataType == DataType::Float32 && output.dataType == DataType::Float16, lowp::f32, lowp::f16)
-    IR_DISPATCH_CASE(input.dataType == DataType::Float32 && output.dataType == DataType::Float32, lowp::f32, lowp::f32)
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float16 && gateUp.dataType == DataType::Float16 && output.dataType == DataType::Float16,
+        lowp::f16, lowp::f16, lowp::f16)
 
-    throw std::invalid_argument("Unsupported SiLU data type combination");
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float16 && gateUp.dataType == DataType::Float16 && output.dataType == DataType::Float32,
+        lowp::f16, lowp::f16, lowp::f32)
+
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float16 && gateUp.dataType == DataType::Float32 && output.dataType == DataType::Float16,
+        lowp::f16, lowp::f32, lowp::f16)
+
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float16 && gateUp.dataType == DataType::Float32 && output.dataType == DataType::Float32,
+        lowp::f16, lowp::f32, lowp::f32)
+
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float32 && gateUp.dataType == DataType::Float16 && output.dataType == DataType::Float16,
+        lowp::f32, lowp::f16, lowp::f16)
+
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float32 && gateUp.dataType == DataType::Float16 && output.dataType == DataType::Float32,
+        lowp::f32, lowp::f16, lowp::f32)
+
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float32 && gateUp.dataType == DataType::Float32 && output.dataType == DataType::Float16,
+        lowp::f32, lowp::f32, lowp::f16)
+
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float32 && gateUp.dataType == DataType::Float32 && output.dataType == DataType::Float32,
+        lowp::f32, lowp::f32, lowp::f32)
+
+    throw std::invalid_argument("Unsupported SwiGLU data type combination");
 }
 
 void CpuBackend::ComputeRoPECosSin(Tensor& sourceCos, Tensor& sourceSin, std::size_t position, std::size_t headDimension,

@@ -47,11 +47,13 @@ private:
     Tensor m_Normalized;
 
     // QKV fuse, 3 tensors cache to avoid allocs in runtime
-    Tensor m_QKV;
+    Tensor m_QKVFuse;
     Tensor m_Query;
     Tensor m_Key;
     Tensor m_Value;
 
+    // RoPE cos + RoPE sin fuse, 2 tensors cache to avoid allocs in runtime
+    Tensor m_RopeCosSinFuse;
     Tensor m_RopeCos;
     Tensor m_RopeSin;
 
@@ -59,11 +61,10 @@ private:
     Tensor m_AttentionProjected;
 
     // Gate + Up fuse, 2 tensors cache to avoid allocs in runtime
-    Tensor m_GateUp;
+    Tensor m_GateUpFuse;
     Tensor m_Gate;
     Tensor m_Up;
-
-    Tensor m_ActivatedGate;
+    
     Tensor m_FeedForward;
     Tensor m_DownOutput;
 

@@ -36,10 +36,10 @@ public:
 
     void Multiply(const Tensor& inputA, const Tensor& inputB, Tensor& output) override;
 
-    void SiLU(const Tensor& input, Tensor& output) override;
+    void SwiGLU(const Tensor& input, const Tensor&, Tensor& output) override;
 
     void ComputeRoPECosSin(Tensor& sourceCos, Tensor& sourceSin, std::size_t position, std::size_t headDimension,
-                    float theta) override;
+                           float theta) override;
 
     void RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inputSin, std::size_t headCount,
               size_t position, std::size_t headDimension) override;

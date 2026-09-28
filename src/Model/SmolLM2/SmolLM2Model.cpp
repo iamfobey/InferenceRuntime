@@ -213,24 +213,19 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
         m_Hidden = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
         m_NextHidden = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
         m_Normalized = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
-        m_QKV = backend.CreateTensor({Config.querySize + 2 * Config.keyValueSize}, DataType::Float32);
+        m_QKVFuse = backend.CreateTensor({Config.querySize + 2 * Config.keyValueSize}, DataType::Float32);
 
-        m_Query = m_QKV.View(0, {Config.numAttentionHeads, Config.headDimension});
+        m_Query = m_QKVFuse.View(0, {Config.numAttentionHeads, Config.headDimension});
 
-        m_Key = m_QKV.View(Config.querySize, {Config.numKeyValueHeads, Config.headDimension});
+        m_Key = m_QKVFuse.View(Config.querySize, {Config.numKeyValueHeads, Config.headDimension});
 
-        m_Value = m_QKV.View(Config.querySize + Config.keyValueSize,
-                             {Config.numKeyValueHeads, Config.headDimension});
+        m_Value = m_QKVFuse.View(Config.querySize + Config.keyValueSize, {Config.numKeyValueHeads, Config.headDimension});
 
         const auto halfDimension = Config.headDimension / 2;
 
-        m_RopeCos = backend.CreateTensor(
-            {Config.maxPositionEmbeddings, halfDimension},
-            DataType::Float32);
-
-        m_RopeSin = backend.CreateTensor(
-            {Config.maxPositionEmbeddings, halfDimension},
-            DataType::Float32);
+        m_RopeCosSinFuse = backend.CreateTensor({Config.maxPositionEmbeddings * 2, halfDimension}, DataType::Float32);
+        m_RopeCos = m_RopeCosSinFuse.View(0, {Config.maxPositionEmbeddings, halfDimension});
+        m_RopeSin = m_RopeCosSinFuse.View(Config.maxPositionEmbeddings * halfDimension, {Config.maxPositionEmbeddings, halfDimension});
 
         for (std::size_t position{}; position < Config.maxPositionEmbeddings; ++position)
         {
@@ -244,10 +239,9 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
 
         m_AttentionOutput = backend.CreateTensor({Config.numAttentionHeads, Config.headDimension}, DataType::Float32);
         m_AttentionProjected = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
-        m_GateUp = backend.CreateTensor({Config.intermediateSize * 2}, DataType::Float32);
-        m_Gate = m_GateUp.View(0, Config.intermediateSize);
-        m_Up = m_GateUp.View(Config.intermediateSize, Config.intermediateSize);
-        m_ActivatedGate = backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
+        m_GateUpFuse = backend.CreateTensor({Config.intermediateSize * 2}, DataType::Float32);
+        m_Gate = m_GateUpFuse.View(0, Config.intermediateSize);
+        m_Up = m_GateUpFuse.View(Config.intermediateSize, Config.intermediateSize);
         m_FeedForward = backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
         m_DownOutput = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
         m_Logits = backend.CreateTensor({Config.vocabSize}, DataType::Float32);
@@ -317,7 +311,7 @@ void SmolLM2Model::DecodeStep(std::int32_t tokenId, IBackend& backend)
             layerIndex];
 
         backend.RMSNorm(m_Hidden, layernorm, static_cast<float>(Config.rmsNormEps), m_Normalized);
-        backend.Linear(selfAttnQKV, m_Normalized, m_QKV);
+        backend.Linear(selfAttnQKV, m_Normalized, m_QKVFuse);
         backend.RoPE(m_Query, m_RopeCos, m_RopeSin, Config.numAttentionHeads, m_Position, Config.headDimension);
         backend.RoPE(m_Key, m_RopeCos, m_RopeSin, Config.numKeyValueHeads, m_Position, Config.headDimension);
         backend.CopyToCache(m_Key, m_KeyCaches[layerIndex], m_Position);
@@ -334,9 +328,8 @@ void SmolLM2Model::DecodeStep(std::int32_t tokenId, IBackend& backend)
         std::swap(m_Hidden, m_NextHidden);
 
         backend.RMSNorm(m_Hidden, postAttentionLayernorm, static_cast<float>(Config.rmsNormEps), m_Normalized);
-        backend.Linear(gateUpProj, m_Normalized, m_GateUp);
-        backend.SiLU(m_Gate, m_ActivatedGate);
-        backend.Multiply(m_ActivatedGate, m_Up, m_FeedForward);
+        backend.Linear(gateUpProj, m_Normalized, m_GateUpFuse);
+        backend.SwiGLU(m_Gate, m_Up, m_FeedForward);
         backend.Linear(downProj, m_FeedForward, m_DownOutput);
         backend.Add(m_Hidden, m_DownOutput, m_NextHidden);
 

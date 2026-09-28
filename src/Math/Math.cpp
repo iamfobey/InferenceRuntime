@@ -15,6 +15,9 @@
 #endif
 
 #include "Math/Math.hpp"
+
+#include <spdlog/spdlog.h>
+
 #include "lowp/lowp.hpp"
 
 namespace
@@ -145,8 +148,20 @@ namespace Math
             std::size_t i{};
 
 #if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
-            for (; i + 8 <= hiddenSize; i += 8)
-                Store8FromFloat(pOutput + destinationOffset + i, Load8AsFloat(pEmbeddingTable + sourceOffset + i));
+            DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
+            {
+                constexpr std::size_t vectorWidth = 8;
+                constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+                for (; i + blockSize <= hiddenSize; i += blockSize)
+                {
+                    for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                    {
+                        const auto offset = i + accumulatorIndex * vectorWidth;
+                        Store8FromFloat(pOutput + destinationOffset + offset, Load8AsFloat(pEmbeddingTable + sourceOffset + offset));
+                    }
+                }
+            });
 #endif
 
             for (; i < hiddenSize; ++i)
@@ -243,8 +258,50 @@ namespace Math
             return;
 
         float meanSquare{};
+        std::size_t i{};
 
-        for (std::size_t i{}; i < elementCount; ++i)
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+        DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
+        {
+            constexpr std::size_t vectorWidth = 8;
+            constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+            __m256 accumulators[AccumulatorCount];
+
+            for (auto& accumulator : accumulators)
+                accumulator = _mm256_setzero_ps();
+
+            for (; i + blockSize <= elementCount; i += blockSize)
+            {
+                for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                {
+                    const auto offset = i + accumulatorIndex * vectorWidth;
+                    const auto input = Load8AsFloat(pInput + offset);
+
+                    accumulators[accumulatorIndex] = _mm256_fmadd_ps(input, input, accumulators[accumulatorIndex]);
+                }
+            }
+
+            auto result = accumulators[0];
+
+            for (std::size_t accumulatorIndex = 1; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                result = _mm256_add_ps(result, accumulators[accumulatorIndex]);
+
+            const auto hiQuad = _mm256_extractf128_ps(result, 1);
+            const auto loQuad = _mm256_castps256_ps128(result);
+            auto sum128 = _mm_add_ps(loQuad, hiQuad);
+
+            const auto shuf1 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(2, 3, 0, 1));
+            sum128 = _mm_add_ps(sum128, shuf1);
+
+            const auto shuf2 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 0, 3, 2));
+            sum128 = _mm_add_ps(sum128, shuf2);
+
+            _mm_store_ss(&meanSquare, sum128);
+        });
+#endif
+
+        for (; i < elementCount; ++i)
         {
             const auto input = static_cast<float>(pInput[i]);
             meanSquare += input * input;
@@ -253,19 +310,28 @@ namespace Math
         meanSquare /= static_cast<float>(elementCount);
         const auto inverseRms = 1.0f / std::sqrt(meanSquare + epsilon);
 
-        std::size_t i{};
+        i = 0;
 
 #if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
-        const auto inverseRmsVec = _mm256_set1_ps(inverseRms);
-
-        for (; i + 8 <= elementCount; i += 8)
+        DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
         {
-            const auto xVec = Load8AsFloat(pInput + i);
-            const auto weightVec = Load8AsFloat(pWeight + i);
-            const auto normalized = _mm256_mul_ps(xVec, inverseRmsVec);
-            const auto result = _mm256_mul_ps(weightVec, normalized);
-            Store8FromFloat(pOutput + i, result);
-        }
+            constexpr std::size_t vectorWidth = 8;
+            constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+            const auto inverseRmsVec = _mm256_set1_ps(inverseRms);
+
+            for (; i + blockSize <= elementCount; i += blockSize)
+            {
+                for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                {
+                    const auto offset = i + accumulatorIndex * vectorWidth;
+                    const auto xVec = Load8AsFloat(pInput + offset);
+                    const auto weightVec = Load8AsFloat(pWeight + offset);
+                    const auto normalized = _mm256_mul_ps(xVec, inverseRmsVec);
+                    Store8FromFloat(pOutput + offset, _mm256_mul_ps(weightVec, normalized));
+                }
+            }
+        });
 #endif
 
         for (; i < elementCount; ++i)
@@ -359,8 +425,8 @@ namespace Math
         return inputA * inputB;
     }
 
-    template <class InputType, class OutputType>
-    void SiLU(const InputType* pInput, OutputType* pOutput, size_t elementCount)
+    template <class InputType, class GateUpType, class OutputType>
+    void SiLU(const InputType* pInput, const GateUpType* pGateUp, OutputType* pOutput, size_t elementCount)
     {
         std::size_t i{};
 
@@ -379,8 +445,9 @@ namespace Math
                 {
                     const auto offset = i + accumulatorIndex * vectorWidth;
                     const auto input = Load8AsFloat(pInput + offset);
+                    const auto gateUp = Load8AsFloat(pGateUp + offset);
                     const auto exp = exp256_ps(_mm256_sub_ps(zero, input));
-                    Store8FromFloat(pOutput + offset, _mm256_div_ps(input, _mm256_add_ps(one, exp)));
+                    Store8FromFloat(pOutput + offset, _mm256_mul_ps(_mm256_div_ps(input, _mm256_add_ps(one, exp)), gateUp));
                 }
             }
         });
@@ -389,14 +456,25 @@ namespace Math
         for (; i < elementCount; ++i)
         {
             const auto input = static_cast<float>(pInput[i]);
-            pOutput[i] = static_cast<OutputType>(input / (1.0f + std::exp(-input)));
+            pOutput[i] = static_cast<OutputType>(input / (1.0f + std::exp(-input)) * static_cast<float>(pGateUp[i]));
         }
     }
 
-    template void SiLU<lowp::f16, lowp::f16>(const lowp::f16*, lowp::f16*, size_t);
-    template void SiLU<lowp::f16, lowp::f32>(const lowp::f16*, lowp::f32*, size_t);
-    template void SiLU<lowp::f32, lowp::f16>(const lowp::f32*, lowp::f16*, size_t);
-    template void SiLU<lowp::f32, lowp::f32>(const lowp::f32*, lowp::f32*, size_t);
+    template void SiLU<lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, lowp::f16*, size_t);
+
+    template void SiLU<lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, lowp::f32*, size_t);
+
+    template void SiLU<lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, lowp::f16*, size_t);
+
+    template void SiLU<lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, lowp::f32*, size_t);
+
+    template void SiLU<lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, lowp::f16*, size_t);
+
+    template void SiLU<lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, lowp::f32*, size_t);
+
+    template void SiLU<lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, lowp::f16*, size_t);
+
+    template void SiLU<lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, lowp::f32*, size_t);
 
     template <class CosType, class SinType>
     void ComputeRoPECosSin(CosType* pSourceCos, SinType* pSourceSin, std::size_t position, std::size_t headDimension, float theta)
@@ -433,9 +511,36 @@ namespace Math
 
         for (std::size_t h{}; h < headCount; ++h)
         {
+            std::size_t p{};
             const auto headOffset = h * headDimension;
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+            DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
+            {
+                constexpr std::size_t vectorWidth = 8;
+                constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
 
-            for (std::size_t p{}; p < halfDimension; ++p)
+                for (; p + blockSize <= halfDimension; p += blockSize)
+                {
+                    for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                    {
+                        const auto offset = p + accumulatorIndex * vectorWidth;
+
+                        const auto firstIndex = headOffset + offset;
+                        const auto secondIndex = headOffset + halfDimension + offset;
+                        const auto first = Load8AsFloat(pSource + firstIndex);
+                        const auto second = Load8AsFloat(pSource + secondIndex);
+
+                        const auto cosAngle = Load8AsFloat(pInputCos + offset);
+                        const auto sinAngle = Load8AsFloat(pInputSin + offset);
+
+                        Store8FromFloat(pSource + firstIndex, _mm256_sub_ps(_mm256_mul_ps(first, cosAngle), _mm256_mul_ps(second, sinAngle)));
+                        Store8FromFloat(pSource + secondIndex, _mm256_add_ps(_mm256_mul_ps(first, sinAngle), _mm256_mul_ps(second, cosAngle)));
+                    }
+                }
+            });
+#endif
+
+            for (; p < halfDimension; ++p)
             {
                 const auto firstIndex = headOffset + p;
                 const auto secondIndex = headOffset + halfDimension + p;
@@ -482,15 +587,79 @@ namespace Math
             float probabilitySum{};
             float oldMaximumScore{};
 
-            for (std::size_t d{}; d < headDimension; ++d)
+            std::size_t d{};
+
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+            DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
+            {
+                constexpr std::size_t vectorWidth = 8;
+                constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+                for (; d + blockSize <= headDimension; d += blockSize)
+                {
+                    for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                    {
+                        const auto offset = d + accumulatorIndex * vectorWidth;
+
+                        Store8FromFloat(pOutput + qOffset + offset, _mm256_set1_ps(0.0f));
+                    }
+                }
+            });
+#endif
+
+            for (; d < headDimension; ++d)
                 pOutput[qOffset + d] = static_cast<OutputType>(0.0f);
 
             for (std::size_t t{}; t < validTokenCount; ++t)
             {
                 const auto kvOffset = (t * keyValueHeadCount + kvHead) * headDimension;
                 float score{};
+                d = 0;
 
-                for (std::size_t d{}; d < headDimension; ++d)
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+                DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
+                {
+                    constexpr std::size_t vectorWidth = 8;
+                    constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+                    __m256 accumulators[AccumulatorCount];
+
+                    for (auto& accumulator : accumulators)
+                        accumulator = _mm256_setzero_ps();
+
+                    for (; d + blockSize <= headDimension; d += blockSize)
+                    {
+                        for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                        {
+                            const auto offset = d + accumulatorIndex * vectorWidth;
+
+                            accumulators[accumulatorIndex] = _mm256_fmadd_ps(
+                                Load8AsFloat(pQ + qOffset + offset),
+                                Load8AsFloat(pKCache + kvOffset + offset),
+                                accumulators[accumulatorIndex]);
+                        }
+                    }
+
+                    auto result = accumulators[0];
+
+                    for (std::size_t accumulatorIndex = 1; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                        result = _mm256_add_ps(result, accumulators[accumulatorIndex]);
+
+                    const auto hiQuad = _mm256_extractf128_ps(result, 1);
+                    const auto loQuad = _mm256_castps256_ps128(result);
+                    auto sum128 = _mm_add_ps(loQuad, hiQuad);
+
+                    const auto shuf1 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(2, 3, 0, 1));
+                    sum128 = _mm_add_ps(sum128, shuf1);
+
+                    const auto shuf2 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 0, 3, 2));
+                    sum128 = _mm_add_ps(sum128, shuf2);
+
+                    _mm_store_ss(&score, sum128);
+                });
+#endif
+
+                for (; d < headDimension; ++d)
                     score += static_cast<float>(pQ[qOffset + d]) * static_cast<float>(pKCache[kvOffset + d]);
 
                 score *= scale;
@@ -502,7 +671,34 @@ namespace Math
 
                 (probabilitySum *= correction) += exp;
 
-                for (std::size_t d{}; d < headDimension; ++d)
+                d = 0;
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+                const auto correctionVec = _mm256_set1_ps(correction);
+                const auto expVec = _mm256_set1_ps(exp);
+
+                DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
+                {
+                    constexpr std::size_t vectorWidth = 8;
+                    constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+                    for (; d + blockSize <= headDimension; d += blockSize)
+                    {
+                        for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                        {
+                            const auto offset = d + accumulatorIndex * vectorWidth;
+
+                            const auto output = Load8AsFloat(pOutput + qOffset + offset);
+                            const auto value = Load8AsFloat(pVCache + kvOffset + offset);
+
+                            Store8FromFloat(
+                                pOutput + qOffset + offset,
+                                _mm256_fmadd_ps(value, expVec, _mm256_mul_ps(output, correctionVec)));
+                        }
+                    }
+                });
+#endif
+
+                for (; d < headDimension; ++d)
                 {
                     const auto output = static_cast<float>(pOutput[qOffset + d]);
                     pOutput[qOffset + d] = static_cast<OutputType>(output * correction + exp * static_cast<float>(pVCache[kvOffset + d]));
@@ -511,7 +707,30 @@ namespace Math
 
             const auto inverseProbabilitySum = 1.0f / probabilitySum;
 
-            for (std::size_t d{}; d < headDimension; ++d)
+            d = 0;
+
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+            DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
+            {
+                constexpr std::size_t vectorWidth = 8;
+                constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+                const auto inverseProbabilitySumVec = _mm256_set1_ps(inverseProbabilitySum);
+
+                for (; d + blockSize <= headDimension; d += blockSize)
+                {
+                    for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                    {
+                        const auto offset = d + accumulatorIndex * vectorWidth;
+
+                        Store8FromFloat(pOutput + qOffset + offset,
+                                        _mm256_mul_ps(Load8AsFloat(pOutput + qOffset + offset), inverseProbabilitySumVec));
+                    }
+                }
+            });
+#endif
+
+            for (; d < headDimension; ++d)
                 pOutput[qOffset + d] = static_cast<OutputType>(static_cast<float>(pOutput[qOffset + d]) * inverseProbabilitySum);
         }
     }
@@ -554,7 +773,26 @@ namespace Math
     {
         const auto cacheOffset = position * elementCount;
 
-        for (std::size_t i{}; i < elementCount; ++i)
+        std::size_t i{};
+#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+        DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
+        {
+            constexpr std::size_t vectorWidth = 8;
+            constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+            for (; i + blockSize <= elementCount; i += blockSize)
+            {
+                for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
+                {
+                    const auto offset = i + accumulatorIndex * vectorWidth;
+
+                    Store8FromFloat(pCache + cacheOffset + offset, Load8AsFloat(pSource + offset));
+                }
+            }
+        });
+#endif
+
+        for (; i < elementCount; ++i)
             pCache[cacheOffset + i] = static_cast<CacheType>(static_cast<float>(pSource[i]));
     }
 

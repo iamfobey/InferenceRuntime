@@ -305,7 +305,7 @@ void CpuBackend::SwiGLU(const Tensor& input, const Tensor& gateUp, Tensor& outpu
 
     const auto dispatch = [&]<class InputType, class GateUpType, class OutputType>()
     {
-        Math::SiLU(
+        Math::SwiGLU(
             input.Data<InputType>(),
             gateUp.Data<GateUpType>(),
             output.Data<OutputType>(),

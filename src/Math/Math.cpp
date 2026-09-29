@@ -426,7 +426,7 @@ namespace Math
     }
 
     template <class InputType, class GateUpType, class OutputType>
-    void SiLU(const InputType* pInput, const GateUpType* pGateUp, OutputType* pOutput, size_t elementCount)
+    void SwiGLU(const InputType* pInput, const GateUpType* pGateUp, OutputType* pOutput, size_t elementCount)
     {
         std::size_t i{};
 
@@ -460,21 +460,21 @@ namespace Math
         }
     }
 
-    template void SiLU<lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, lowp::f16*, size_t);
+    template void SwiGLU<lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, lowp::f16*, size_t);
 
-    template void SiLU<lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, lowp::f32*, size_t);
+    template void SwiGLU<lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, lowp::f32*, size_t);
 
-    template void SiLU<lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, lowp::f16*, size_t);
+    template void SwiGLU<lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, lowp::f16*, size_t);
 
-    template void SiLU<lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, lowp::f32*, size_t);
+    template void SwiGLU<lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, lowp::f32*, size_t);
 
-    template void SiLU<lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, lowp::f16*, size_t);
+    template void SwiGLU<lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, lowp::f16*, size_t);
 
-    template void SiLU<lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, lowp::f32*, size_t);
+    template void SwiGLU<lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, lowp::f32*, size_t);
 
-    template void SiLU<lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, lowp::f16*, size_t);
+    template void SwiGLU<lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, lowp::f16*, size_t);
 
-    template void SiLU<lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, lowp::f32*, size_t);
+    template void SwiGLU<lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, lowp::f32*, size_t);
 
     template <class CosType, class SinType>
     void ComputeRoPECosSin(CosType* pSourceCos, SinType* pSourceSin, std::size_t position, std::size_t headDimension, float theta)

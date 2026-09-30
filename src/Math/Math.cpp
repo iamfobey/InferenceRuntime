@@ -1,11 +1,15 @@
+// ReSharper disable CppDFALoopConditionNotUpdated
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
+#include <spdlog/spdlog.h>
+#include <lowp/lowp.hpp>
 
 #include "Utils/Utils.hpp"
+#include "Math/Math.hpp"
 
 #if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
 #include <immintrin.h>
@@ -13,12 +17,6 @@
 #include <intrin.h>
 #endif
 #endif
-
-#include "Math/Math.hpp"
-
-#include <spdlog/spdlog.h>
-
-#include "lowp/lowp.hpp"
 
 namespace
 {
@@ -74,6 +72,29 @@ namespace
         }
 
         function.template operator()<4>();
+    }
+
+    void AccumulatorsTo1Float(const __m256* accumulators, std::size_t accumulatorCount, float* output)
+    {
+        if (accumulatorCount == 0)
+            return;
+
+        auto result = accumulators[0];
+
+        for (std::size_t accumulatorIndex = 1; accumulatorIndex < accumulatorCount; ++accumulatorIndex)
+            result = _mm256_add_ps(result, accumulators[accumulatorIndex]);
+
+        const auto hiQuad = _mm256_extractf128_ps(result, 1);
+        const auto loQuad = _mm256_castps256_ps128(result);
+        auto sum128 = _mm_add_ps(loQuad, hiQuad);
+
+        const auto shuf1 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(2, 3, 0, 1));
+        sum128 = _mm_add_ps(sum128, shuf1);
+
+        const auto shuf2 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 0, 3, 2));
+        sum128 = _mm_add_ps(sum128, shuf2);
+
+        _mm_store_ss(output, sum128);
     }
 
     // TODO: naive realization of std::exp -> normal
@@ -205,22 +226,7 @@ namespace Math
                     }
                 }
 
-                auto totalAccumulator = accumulators[0];
-
-                for (std::size_t accumulatorIndex = 1; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
-                    totalAccumulator = _mm256_add_ps(totalAccumulator, accumulators[accumulatorIndex]);
-
-                const auto hiQuad = _mm256_extractf128_ps(totalAccumulator, 1);
-                const auto loQuad = _mm256_castps256_ps128(totalAccumulator);
-                auto sum128 = _mm_add_ps(loQuad, hiQuad);
-
-                const auto shuf1 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(2, 3, 0, 1));
-                sum128 = _mm_add_ps(sum128, shuf1);
-
-                const auto shuf2 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 0, 3, 2));
-                sum128 = _mm_add_ps(sum128, shuf2);
-
-                _mm_store_ss(&sum, sum128);
+                AccumulatorsTo1Float(accumulators, AccumulatorCount, &sum);
 
                 for (; column < columns; ++column)
                     sum += static_cast<float>(matrixRow[column]) * static_cast<float>(pInput[column]);
@@ -282,22 +288,7 @@ namespace Math
                 }
             }
 
-            auto result = accumulators[0];
-
-            for (std::size_t accumulatorIndex = 1; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
-                result = _mm256_add_ps(result, accumulators[accumulatorIndex]);
-
-            const auto hiQuad = _mm256_extractf128_ps(result, 1);
-            const auto loQuad = _mm256_castps256_ps128(result);
-            auto sum128 = _mm_add_ps(loQuad, hiQuad);
-
-            const auto shuf1 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(2, 3, 0, 1));
-            sum128 = _mm_add_ps(sum128, shuf1);
-
-            const auto shuf2 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 0, 3, 2));
-            sum128 = _mm_add_ps(sum128, shuf2);
-
-            _mm_store_ss(&meanSquare, sum128);
+            AccumulatorsTo1Float(accumulators, AccumulatorCount, &meanSquare);
         });
 #endif
 
@@ -489,10 +480,8 @@ namespace Math
             const auto exponent = static_cast<float>(2 * p) / static_cast<float>(headDimension);
             const auto inverseFrequency = 1.0f / std::pow(theta, exponent);
             const auto angle = static_cast<float>(position) * inverseFrequency;
-            const auto cosAngle = std::cos(angle);
-            const auto sinAngle = std::sin(angle);
-            pSourceCos[p] = static_cast<CosType>(cosAngle);
-            pSourceSin[p] = static_cast<SinType>(sinAngle);
+            pSourceCos[p] = static_cast<CosType>(std::cos(angle));
+            pSourceSin[p] = static_cast<SinType>(std::sin(angle));
         }
     }
 
@@ -582,10 +571,9 @@ namespace Math
         {
             const auto kvHead = h / groupSize;
             const auto qOffset = h * headDimension;
-            auto currentMaximumScore = -std::numeric_limits<float>::infinity();
 
+            auto currentMaximumScore = -std::numeric_limits<float>::infinity();
             float probabilitySum{};
-            float oldMaximumScore{};
 
             std::size_t d{};
 
@@ -601,7 +589,7 @@ namespace Math
                     {
                         const auto offset = d + accumulatorIndex * vectorWidth;
 
-                        Store8FromFloat(pOutput + qOffset + offset, _mm256_set1_ps(0.0f));
+                        Store8FromFloat(pOutput + qOffset + offset, _mm256_setzero_ps());
                     }
                 }
             });
@@ -613,6 +601,7 @@ namespace Math
             for (std::size_t t{}; t < validTokenCount; ++t)
             {
                 const auto kvOffset = (t * keyValueHeadCount + kvHead) * headDimension;
+
                 float score{};
                 d = 0;
 
@@ -633,29 +622,13 @@ namespace Math
                         {
                             const auto offset = d + accumulatorIndex * vectorWidth;
 
-                            accumulators[accumulatorIndex] = _mm256_fmadd_ps(
-                                Load8AsFloat(pQ + qOffset + offset),
-                                Load8AsFloat(pKCache + kvOffset + offset),
-                                accumulators[accumulatorIndex]);
+                            accumulators[accumulatorIndex] = _mm256_fmadd_ps(Load8AsFloat(pQ + qOffset + offset),
+                                                                             Load8AsFloat(pKCache + kvOffset + offset),
+                                                                             accumulators[accumulatorIndex]);
                         }
                     }
 
-                    auto result = accumulators[0];
-
-                    for (std::size_t accumulatorIndex = 1; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
-                        result = _mm256_add_ps(result, accumulators[accumulatorIndex]);
-
-                    const auto hiQuad = _mm256_extractf128_ps(result, 1);
-                    const auto loQuad = _mm256_castps256_ps128(result);
-                    auto sum128 = _mm_add_ps(loQuad, hiQuad);
-
-                    const auto shuf1 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(2, 3, 0, 1));
-                    sum128 = _mm_add_ps(sum128, shuf1);
-
-                    const auto shuf2 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 0, 3, 2));
-                    sum128 = _mm_add_ps(sum128, shuf2);
-
-                    _mm_store_ss(&score, sum128);
+                    AccumulatorsTo1Float(accumulators, AccumulatorCount, &score);
                 });
 #endif
 
@@ -663,18 +636,30 @@ namespace Math
                     score += static_cast<float>(pQ[qOffset + d]) * static_cast<float>(pKCache[kvOffset + d]);
 
                 score *= scale;
-                oldMaximumScore = currentMaximumScore;
-                currentMaximumScore = std::fmax(currentMaximumScore, score);
 
-                const auto exp = std::exp(score - currentMaximumScore);
-                const auto correction = std::exp(oldMaximumScore - currentMaximumScore);
+                float correction;
+                float probability;
 
-                (probabilitySum *= correction) += exp;
+                if (score > currentMaximumScore)
+                {
+                    correction = std::exp(currentMaximumScore - score);
+                    probability = 1.0f;
+
+                    currentMaximumScore = score;
+                }
+                else
+                {
+                    correction = 1.0f;
+                    probability = std::exp(score - currentMaximumScore);
+                }
+
+                probabilitySum = probabilitySum * correction + probability;
 
                 d = 0;
+
 #if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
                 const auto correctionVec = _mm256_set1_ps(correction);
-                const auto expVec = _mm256_set1_ps(exp);
+                const auto probabilityVec = _mm256_set1_ps(probability);
 
                 DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
                 {
@@ -686,13 +671,12 @@ namespace Math
                         for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
                         {
                             const auto offset = d + accumulatorIndex * vectorWidth;
-
                             const auto output = Load8AsFloat(pOutput + qOffset + offset);
                             const auto value = Load8AsFloat(pVCache + kvOffset + offset);
+                            const auto correctedOutput = _mm256_mul_ps(output, correctionVec);
+                            const auto result = _mm256_fmadd_ps(value, probabilityVec, correctedOutput);
 
-                            Store8FromFloat(
-                                pOutput + qOffset + offset,
-                                _mm256_fmadd_ps(value, expVec, _mm256_mul_ps(output, correctionVec)));
+                            Store8FromFloat(pOutput + qOffset + offset, result);
                         }
                     }
                 });
@@ -701,7 +685,9 @@ namespace Math
                 for (; d < headDimension; ++d)
                 {
                     const auto output = static_cast<float>(pOutput[qOffset + d]);
-                    pOutput[qOffset + d] = static_cast<OutputType>(output * correction + exp * static_cast<float>(pVCache[kvOffset + d]));
+                    const auto value = static_cast<float>(pVCache[kvOffset + d]);
+
+                    pOutput[qOffset + d] = static_cast<OutputType>(output * correction + value * probability);
                 }
             }
 
@@ -710,12 +696,12 @@ namespace Math
             d = 0;
 
 #if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+            const auto inverseProbabilitySumVec = _mm256_set1_ps(inverseProbabilitySum);
+
             DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
             {
                 constexpr std::size_t vectorWidth = 8;
                 constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
-
-                const auto inverseProbabilitySumVec = _mm256_set1_ps(inverseProbabilitySum);
 
                 for (; d + blockSize <= headDimension; d += blockSize)
                 {
@@ -723,50 +709,72 @@ namespace Math
                     {
                         const auto offset = d + accumulatorIndex * vectorWidth;
 
-                        Store8FromFloat(pOutput + qOffset + offset,
-                                        _mm256_mul_ps(Load8AsFloat(pOutput + qOffset + offset), inverseProbabilitySumVec));
+                        const auto output = Load8AsFloat(pOutput + qOffset + offset);
+
+                        Store8FromFloat(
+                            pOutput + qOffset + offset,
+                            _mm256_mul_ps(output, inverseProbabilitySumVec));
                     }
                 }
             });
 #endif
 
             for (; d < headDimension; ++d)
-                pOutput[qOffset + d] = static_cast<OutputType>(static_cast<float>(pOutput[qOffset + d]) * inverseProbabilitySum);
+            {
+                pOutput[qOffset + d] = static_cast<OutputType>(
+                    static_cast<float>(pOutput[qOffset + d]) * inverseProbabilitySum);
+            }
         }
     }
 
-    template void Attention<lowp::f16, lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, const lowp::f16*, lowp::f16*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f16, lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, const lowp::f16*, lowp::f32*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f16, lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f16*, const lowp::f32*, lowp::f16*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f16, lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f16*, const lowp::f32*, lowp::f32*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f16, lowp::f32, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f32*, const lowp::f16*, lowp::f16*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f16, lowp::f32, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f32*, const lowp::f16*, lowp::f32*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f16, lowp::f32, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, const lowp::f32*, lowp::f16*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f16, lowp::f32, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, const lowp::f32*, lowp::f32*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f32, lowp::f16, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, const lowp::f16*, lowp::f16*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f32, lowp::f16, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, const lowp::f16*, lowp::f32*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f32, lowp::f16, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f16*, const lowp::f32*, lowp::f16*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f32, lowp::f16, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f16*, const lowp::f32*, lowp::f32*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f32, lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f32*, const lowp::f16*, lowp::f16*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f32, lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f32*, const lowp::f16*, lowp::f32*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f32, lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, const lowp::f32*, lowp::f16*, size_t,
-                                                                        size_t, size_t, size_t);
-    template void Attention<lowp::f32, lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, const lowp::f32*, lowp::f32*, size_t,
-                                                                        size_t, size_t, size_t);
+    template
+    void Attention<lowp::f16, lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, const lowp::f16*, lowp::f16*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f16, lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, const lowp::f16*, lowp::f32*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f16, lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f16*, const lowp::f32*, lowp::f16*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f16, lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f16*, const lowp::f32*, lowp::f32*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f16, lowp::f32, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f32*, const lowp::f16*, lowp::f16*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f16, lowp::f32, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f32*, const lowp::f16*, lowp::f32*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f16, lowp::f32, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, const lowp::f32*, lowp::f16*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f16, lowp::f32, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, const lowp::f32*, lowp::f32*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f32, lowp::f16, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, const lowp::f16*, lowp::f16*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f32, lowp::f16, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, const lowp::f16*, lowp::f32*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f32, lowp::f16, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f16*, const lowp::f32*, lowp::f16*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f32, lowp::f16, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f16*, const lowp::f32*, lowp::f32*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f32, lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f32*, const lowp::f16*, lowp::f16*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f32, lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f32*, const lowp::f16*, lowp::f32*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f32, lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, const lowp::f32*, lowp::f16*, size_t,
+                                                               size_t, size_t, size_t);
+    template
+    void Attention<lowp::f32, lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, const lowp::f32*, lowp::f32*, size_t,
+                                                               size_t, size_t, size_t);
 
     template <class SourceType, class CacheType>
     void CopyToCache(const SourceType* pSource, CacheType* pCache, size_t position, size_t elementCount)

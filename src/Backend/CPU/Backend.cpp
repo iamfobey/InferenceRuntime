@@ -5,13 +5,13 @@
 #include <span>
 #include <stdexcept>
 #include <utility>
+#include <spdlog/spdlog.h>
+#include <lowp/lowp.hpp>
 
 #include "Backend/CPU/Buffer.hpp"
 #include "Math/Math.hpp"
 #include "Utils/Utils.hpp"
 #include "Utils/Converters.hpp"
-#include "spdlog/spdlog.h"
-#include "lowp/lowp.hpp"
 
 CpuBackend::CpuBackend(const CpuBackendOptions options) :
     m_Options(options),

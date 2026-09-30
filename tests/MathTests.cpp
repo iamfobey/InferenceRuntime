@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 
 #include "Math/Math.hpp"
-#include "lowp/lowp.hpp"
 
 #include <algorithm>
 #include <array>
@@ -11,6 +10,7 @@
 #include <tuple>
 #include <type_traits>
 #include <vector>
+#include <lowp/lowp.hpp>
 
 namespace
 {

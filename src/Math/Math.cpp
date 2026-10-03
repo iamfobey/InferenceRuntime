@@ -11,7 +11,7 @@
 #include "Utils/Utils.hpp"
 #include "Math/Math.hpp"
 
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
 #include <immintrin.h>
 #if defined(_MSC_VER)
 #include <intrin.h>
@@ -20,7 +20,7 @@
 
 namespace
 {
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
     template <class T>
     __m256 Load8AsFloat(const T* source) noexcept
     {
@@ -97,46 +97,51 @@ namespace
         _mm_store_ss(output, sum128);
     }
 
+    struct Exp256PsConstants
+    {
+        const __m256 invLn2 = _mm256_set1_ps(1.4426950408889634074f); // 1/ln(2)
+        const __m256 ln2Hi = _mm256_set1_ps(-0.693145751953125f); // major ln(2)
+        const __m256 ln2Lo = _mm256_set1_ps(-1.428606820309417232e-7f); // minor ln(2)
+
+        // (^5) for e^r on [-ln(2)/2, ln(2)/2]
+        const __m256 c0 = _mm256_set1_ps(1.0f);
+        const __m256 c1 = _mm256_set1_ps(1.0f);
+        const __m256 c2 = _mm256_set1_ps(0.5f);
+        const __m256 c3 = _mm256_set1_ps(0.1666666716337204f);
+        const __m256 c4 = _mm256_set1_ps(0.0416664853692055f);
+        const __m256 c5 = _mm256_set1_ps(0.0083333607763052f);
+
+        // limits
+        const __m256 maxExp = _mm256_set1_ps(88.3762626647949f);
+        const __m256 minExp = _mm256_set1_ps(-88.3762626647949f);
+
+        const __m256i bias = _mm256_set1_epi32(127);
+    } exp256_ps_constants;
+
     // TODO: naive realization of std::exp -> normal
     __m256 exp256_ps(__m256 x)
     {
-        const auto inv_ln2 = _mm256_set1_ps(1.4426950408889634074f); // 1/ln(2)
-        const auto ln2_hi = _mm256_set1_ps(-0.693145751953125f); // major ln(2)
-        const auto ln2_lo = _mm256_set1_ps(-1.428606820309417232e-7f); // minor ln(2)
-
-        // (^5) for e^r on [-ln(2)/2, ln(2)/2]
-        const auto c0 = _mm256_set1_ps(1.0f);
-        const auto c1 = _mm256_set1_ps(1.0f);
-        const auto c2 = _mm256_set1_ps(0.5f);
-        const auto c3 = _mm256_set1_ps(0.1666666716337204f);
-        const auto c4 = _mm256_set1_ps(0.0416664853692055f);
-        const auto c5 = _mm256_set1_ps(0.0083333607763052f);
-
-        // limits
-        const auto max_exp = _mm256_set1_ps(88.3762626647949f);
-        const auto min_exp = _mm256_set1_ps(-88.3762626647949f);
-        x = _mm256_min_ps(x, max_exp);
-        x = _mm256_max_ps(x, min_exp);
+        x = _mm256_min_ps(x, exp256_ps_constants.maxExp);
+        x = _mm256_max_ps(x, exp256_ps_constants.minExp);
 
         // n = round(x / ln(2))
-        const auto fx = _mm256_round_ps(_mm256_mul_ps(x, inv_ln2), _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+        const auto fx = _mm256_round_ps(_mm256_mul_ps(x, exp256_ps_constants.invLn2), _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
         const auto n = _mm256_cvtps_epi32(fx);
 
         // r = x - n * ln(2)
-        __m256 r = _mm256_fmadd_ps(fx, ln2_hi, x);
-        r = _mm256_fmadd_ps(fx, ln2_lo, r);
+        auto r = _mm256_fmadd_ps(fx, exp256_ps_constants.ln2Hi, x);
+        r = _mm256_fmadd_ps(fx, exp256_ps_constants.ln2Lo, r);
 
         // P(r) = c0 + r*(c1 + r*(c2 + r*(c3 + r*(c4 + r*c5))))
-        __m256 p = c5;
-        p = _mm256_fmadd_ps(p, r, c4);
-        p = _mm256_fmadd_ps(p, r, c3);
-        p = _mm256_fmadd_ps(p, r, c2);
-        p = _mm256_fmadd_ps(p, r, c1);
-        p = _mm256_fmadd_ps(p, r, c0);
+        auto p = exp256_ps_constants.c5;
+        p = _mm256_fmadd_ps(p, r, exp256_ps_constants.c4);
+        p = _mm256_fmadd_ps(p, r, exp256_ps_constants.c3);
+        p = _mm256_fmadd_ps(p, r, exp256_ps_constants.c2);
+        p = _mm256_fmadd_ps(p, r, exp256_ps_constants.c1);
+        p = _mm256_fmadd_ps(p, r, exp256_ps_constants.c0);
 
         // 2^n IEEE 754 float
-        const auto bias = _mm256_set1_epi32(127);
-        const auto twon_bits = _mm256_slli_epi32(_mm256_add_epi32(n, bias), 23);
+        const auto twon_bits = _mm256_slli_epi32(_mm256_add_epi32(n, exp256_ps_constants.bias), 23);
         const auto twon = _mm256_castsi256_ps(twon_bits);
 
         // e^x = P(r) * 2^n
@@ -168,7 +173,7 @@ namespace Math
             const auto destinationOffset = t * hiddenSize;
             std::size_t i{};
 
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
             DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
             {
                 constexpr std::size_t vectorWidth = 8;
@@ -199,7 +204,7 @@ namespace Math
     void LinearRange(const WeightType* pMatrix, const InputType* pInput, OutputType* pOutput,
                      std::size_t beginRow, std::size_t endRow, std::size_t columns)
     {
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
         DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
         {
             constexpr std::size_t vectorWidth = 8;
@@ -266,7 +271,7 @@ namespace Math
         float meanSquare{};
         std::size_t i{};
 
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
         DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
         {
             constexpr std::size_t vectorWidth = 8;
@@ -303,7 +308,7 @@ namespace Math
 
         i = 0;
 
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
         DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
         {
             constexpr std::size_t vectorWidth = 8;
@@ -343,7 +348,7 @@ namespace Math
     {
         std::size_t i{};
 
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
         DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
         {
             constexpr std::size_t vectorWidth = 8;
@@ -378,7 +383,7 @@ namespace Math
     {
         std::size_t i{};
 
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
         DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
         {
             constexpr std::size_t vectorWidth = 8;
@@ -421,7 +426,7 @@ namespace Math
     {
         std::size_t i{};
 
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
         const auto one = _mm256_set1_ps(1.0f);
         const auto zero = _mm256_setzero_ps();
 
@@ -502,7 +507,7 @@ namespace Math
         {
             std::size_t p{};
             const auto headOffset = h * headDimension;
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
             DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
             {
                 constexpr std::size_t vectorWidth = 8;
@@ -577,7 +582,7 @@ namespace Math
 
             std::size_t d{};
 
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
             DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
             {
                 constexpr std::size_t vectorWidth = 8;
@@ -605,7 +610,7 @@ namespace Math
                 float score{};
                 d = 0;
 
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
                 DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
                 {
                     constexpr std::size_t vectorWidth = 8;
@@ -657,7 +662,7 @@ namespace Math
 
                 d = 0;
 
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
                 const auto correctionVec = _mm256_set1_ps(correction);
                 const auto probabilityVec = _mm256_set1_ps(probability);
 
@@ -695,7 +700,7 @@ namespace Math
 
             d = 0;
 
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
             const auto inverseProbabilitySumVec = _mm256_set1_ps(inverseProbabilitySum);
 
             DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
@@ -782,7 +787,7 @@ namespace Math
         const auto cacheOffset = position * elementCount;
 
         std::size_t i{};
-#if defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
+#if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
         DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
         {
             constexpr std::size_t vectorWidth = 8;

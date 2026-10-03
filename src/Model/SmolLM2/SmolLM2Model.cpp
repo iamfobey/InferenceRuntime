@@ -210,10 +210,10 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
             }
         }
 
-        m_Hidden = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
-        m_NextHidden = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
-        m_Normalized = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
-        m_QKVFuse = backend.CreateTensor({Config.querySize + 2 * Config.keyValueSize}, DataType::Float32);
+        m_Hidden = backend.CreateTensor({Config.hiddenSize}, DataType::Float16);
+        m_NextHidden = backend.CreateTensor({Config.hiddenSize}, DataType::Float16);
+        m_Normalized = backend.CreateTensor({Config.hiddenSize}, DataType::Float16);
+        m_QKVFuse = backend.CreateTensor({Config.querySize + 2 * Config.keyValueSize}, DataType::Float16);
 
         m_Query = m_QKVFuse.View(0, {Config.numAttentionHeads, Config.headDimension});
 
@@ -223,7 +223,7 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
 
         const auto halfDimension = Config.headDimension / 2;
 
-        m_RopeCosSinFuse = backend.CreateTensor({Config.maxPositionEmbeddings * 2, halfDimension}, DataType::Float32);
+        m_RopeCosSinFuse = backend.CreateTensor({Config.maxPositionEmbeddings * 2, halfDimension}, DataType::Float16);
         m_RopeCos = m_RopeCosSinFuse.View(0, {Config.maxPositionEmbeddings, halfDimension});
         m_RopeSin = m_RopeCosSinFuse.View(Config.maxPositionEmbeddings * halfDimension, {Config.maxPositionEmbeddings, halfDimension});
 
@@ -237,13 +237,13 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
                 static_cast<float>(Config.ropeTheta));
         }
 
-        m_AttentionOutput = backend.CreateTensor({Config.numAttentionHeads, Config.headDimension}, DataType::Float32);
-        m_AttentionProjected = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
-        m_GateUpFuse = backend.CreateTensor({Config.intermediateSize * 2}, DataType::Float32);
+        m_AttentionOutput = backend.CreateTensor({Config.numAttentionHeads, Config.headDimension}, DataType::Float16);
+        m_AttentionProjected = backend.CreateTensor({Config.hiddenSize}, DataType::Float16);
+        m_GateUpFuse = backend.CreateTensor({Config.intermediateSize * 2}, DataType::Float16);
         m_Gate = m_GateUpFuse.View(0, Config.intermediateSize);
         m_Up = m_GateUpFuse.View(Config.intermediateSize, Config.intermediateSize);
-        m_FeedForward = backend.CreateTensor({Config.intermediateSize}, DataType::Float32);
-        m_DownOutput = backend.CreateTensor({Config.hiddenSize}, DataType::Float32);
+        m_FeedForward = backend.CreateTensor({Config.intermediateSize}, DataType::Float16);
+        m_DownOutput = backend.CreateTensor({Config.hiddenSize}, DataType::Float16);
         m_Logits = backend.CreateTensor({Config.vocabSize}, DataType::Float32);
 
         m_KeyCaches.resize(Config.numHiddenLayers);
@@ -254,11 +254,11 @@ bool SmolLM2Model::Load(const std::filesystem::path& path, IBackend& backend)
             m_KeyCaches[i] = backend.CreateTensor({
                                                       Config.maxPositionEmbeddings, Config.numKeyValueHeads,
                                                       Config.headDimension
-                                                  }, DataType::Float32);
+                                                  }, DataType::Float16);
             m_ValueCaches[i] = backend.CreateTensor({
                                                         Config.maxPositionEmbeddings, Config.numKeyValueHeads,
                                                         Config.headDimension
-                                                    }, DataType::Float32);
+                                                    }, DataType::Float16);
         }
 
         if (tokenizer->Load(path / "tokenizer.json"))

@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
-#include <type_traits>
 #include <spdlog/spdlog.h>
 #include <lowp/lowp.hpp>
 
@@ -21,44 +20,8 @@
 namespace
 {
 #if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
-    template <class T>
-    __m256 Load8AsFloat(const T* source) noexcept
-    {
-        if constexpr (std::is_same_v<T, float>)
-        {
-            return _mm256_loadu_ps(source);
-        }
-        else if constexpr (std::is_same_v<T, lowp::f16>)
-        {
-            const auto half = _mm_loadu_si128(reinterpret_cast<const __m128i*>(source));
-
-            return _mm256_cvtph_ps(half);
-        }
-        else if constexpr (std::is_same_v<T, lowp::f32>)
-        {
-            return _mm256_loadu_ps(reinterpret_cast<const float*>(source));
-        }
-
-        return _mm256_setzero_ps();
-    }
-
-    template <class T>
-    void Store8FromFloat(T* destination, const __m256 value) noexcept
-    {
-        if constexpr (std::is_same_v<T, float>)
-        {
-            _mm256_storeu_ps(destination, value);
-        }
-        else if constexpr (std::is_same_v<T, lowp::f16>)
-        {
-            const auto half = _mm256_cvtps_ph(value, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
-            _mm_storeu_si128(reinterpret_cast<__m128i*>(destination), half);
-        }
-        else if constexpr (std::is_same_v<T, lowp::f32>)
-        {
-            _mm256_storeu_ps(reinterpret_cast<float*>(destination), value);
-        }
-    }
+    using lowp::simd::Load8AsFloat;
+    using lowp::simd::Store8FromFloat;
 
     template <class Function>
     void DispatchAccumulatorCount(Function&& function)

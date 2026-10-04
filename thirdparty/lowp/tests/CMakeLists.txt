@@ -24,7 +24,7 @@ gtest_discover_tests(lowp_modular_tests)
 
 add_executable(lowp_single_header_tests single_header_test.cpp)
 target_include_directories(lowp_single_header_tests PRIVATE "${PROJECT_SOURCE_DIR}/single_include")
-target_link_libraries(lowp_single_header_tests PRIVATE GTest::gtest_main)
+target_link_libraries(lowp_single_header_tests PRIVATE lowp::lowp GTest::gtest_main)
 target_compile_features(lowp_single_header_tests PRIVATE cxx_std_17)
 gtest_discover_tests(lowp_single_header_tests)
 

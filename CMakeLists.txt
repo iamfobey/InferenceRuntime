@@ -12,6 +12,7 @@ include(CTest)
 option(ENABLE_AVX2 "Enable AVX2" OFF)
 option(BUILD_BENCHMARKS "Build runtime benchmarks" ON)
 
+set(LOWP_ENABLE_AVX2 ${ENABLE_AVX2} CACHE BOOL "Enable AVX2/F16C acceleration in lowp" FORCE)
 add_subdirectory(thirdparty/lowp)
 
 file(GLOB_RECURSE RUNTIME_SOURCES CONFIGURE_DEPENDS
@@ -21,11 +22,6 @@ file(GLOB_RECURSE RUNTIME_SOURCES CONFIGURE_DEPENDS
 
 list(REMOVE_ITEM RUNTIME_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/src/Main.cpp"
-)
-
-set(AVX2_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/Math/Math.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/Utils/Converters.cpp"
 )
 
 add_library(runtime_core STATIC ${RUNTIME_SOURCES})
@@ -52,40 +48,20 @@ target_compile_definitions(runtime_core PRIVATE
 )
 
 if (MSVC)
-    if (ENABLE_AVX2)
-        check_cxx_compiler_flag("/arch:AVX2" COMPILER_SUPPORTS_AVX2)
-
-        if (NOT COMPILER_SUPPORTS_AVX2)
-            message(FATAL_ERROR "ENABLE_AVX2=ON, but compiler does not support /arch:AVX2")
-        endif ()
-
-        set_source_files_properties(
-                ${AVX2_SOURCES}
-                PROPERTIES COMPILE_OPTIONS "/arch:AVX2"
-        )
-    else ()
-        set_source_files_properties(
-                ${AVX2_SOURCES}
-                PROPERTIES COMPILE_OPTIONS "/arch:SSE2"
-        )
+    if (NOT ENABLE_AVX2)
+        target_compile_options(runtime_core PRIVATE "/arch:SSE2")
     endif ()
 else ()
     if (ENABLE_AVX2)
-        check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
+        check_cxx_compiler_flag("-mfma" COMPILER_SUPPORTS_FMA)
 
-        if (NOT COMPILER_SUPPORTS_AVX2)
-            message(FATAL_ERROR "ENABLE_AVX2=ON, but compiler does not support -mavx2")
+        if (NOT COMPILER_SUPPORTS_FMA)
+            message(FATAL_ERROR "ENABLE_AVX2=ON, but compiler does not support -mfma")
         endif ()
 
-        set_source_files_properties(
-                ${AVX2_SOURCES}
-                PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma;-mf16c"
-        )
+        target_compile_options(runtime_core PRIVATE "-mfma")
     else ()
-        set_source_files_properties(
-                ${AVX2_SOURCES}
-                PROPERTIES COMPILE_OPTIONS "-mno-avx;-mno-avx2;-mno-fma;-mno-f16c"
-        )
+        target_compile_options(runtime_core PRIVATE "-mno-avx" "-mno-avx2" "-mno-fma" "-mno-f16c")
     endif ()
 endif ()
 
@@ -114,4 +90,5 @@ if (BUILD_BENCHMARKS)
 endif ()
 
 message(STATUS "ENABLE_AVX2: ${ENABLE_AVX2}")
+message(STATUS "LOWP_ENABLE_AVX2: ${LOWP_ENABLE_AVX2}")
 message(STATUS "BUILD_BENCHMARKS: ${BUILD_BENCHMARKS}")

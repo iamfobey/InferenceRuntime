@@ -3,6 +3,16 @@
 
 // ---- lowp/lowp.hpp ----
 
+// ---- lowp/config.hpp ----
+
+#ifndef LOWP_HAS_F16C
+    #if defined(__AVX2__) && (defined(_MSC_VER) || defined(__F16C__))
+        #define LOWP_HAS_F16C 1
+    #else
+        #define LOWP_HAS_F16C 0
+    #endif
+#endif
+
 // ---- lowp/types/types.hpp ----
 
 // ---- lowp/types/f16.hpp ----
@@ -18,6 +28,8 @@ namespace lowp
         using type = std::uint16_t;
 
     public:
+        f16() noexcept = default;
+
         explicit f16(f32 value) noexcept;
         explicit f16(float value) noexcept;
 
@@ -72,6 +84,8 @@ namespace lowp
         using type = std::uint32_t;
 
     public:
+        f32() noexcept = default;
+        
         explicit f32(f16 value) noexcept;
         explicit f32(float value) noexcept;
 
@@ -119,8 +133,17 @@ namespace lowp
 
 #include <cstring>
 
+
+#if LOWP_HAS_F16C
+#include <immintrin.h>
+#endif
+
 namespace lowp
 {
+#if LOWP_HAS_F16C
+    inline f16::f16(f32 value) noexcept :
+        f16(static_cast<float>(value)) {}
+#else
     inline f16::f16(f32 value) noexcept
     {
         const auto sign = value.SignBits() >> 16;
@@ -192,22 +215,43 @@ namespace lowp
 
         m_Bits = sign | (static_cast<std::uint32_t>(halfExponent) << 10) | halfMantissa;
     }
+#endif
 
+#if LOWP_HAS_F16C
+    inline f16::f16(float value) noexcept
+    {
+        const auto half = _mm_cvtps_ph(_mm_set_ss(value), _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+
+        m_Bits = static_cast<std::uint16_t>(_mm_cvtsi128_si32(half));
+    }
+#else
     inline f16::f16(float value) noexcept :
         f16(f32{value}) {}
+#endif
 
+#if LOWP_HAS_F16C
     inline f16::operator float() const noexcept
     {
-        f32 value{*this};
-        return static_cast<float>(value);
+        return _mm_cvtss_f32(_mm_cvtph_ps(_mm_cvtsi32_si128(m_Bits)));
     }
+#else
+    inline f16::operator float() const noexcept
+    {
+        return static_cast<float>(f32{*this});
+    }
+#endif
 
     inline f16& f16::operator=(float value) noexcept
     {
         m_Bits = f16{value}.m_Bits;
+
         return *this;
     }
 
+#if LOWP_HAS_F16C
+    inline f32::f32(f16 value) noexcept :
+        f32(static_cast<float>(value)) {}
+#else
     inline f32::f32(f16 value) noexcept
     {
         const auto sign = static_cast<std::uint32_t>(value.SignBits()) << 16;
@@ -221,6 +265,7 @@ namespace lowp
                 m_Bits = sign;
                 return;
             }
+
             std::int32_t normalizedExponent = -14;
 
             while ((mantissa & 0x0400u) == 0)
@@ -235,23 +280,24 @@ namespace lowp
             m_Bits = sign | (floatExponent << 23) | (mantissa << 13);
             return;
         }
+
         if (exponent == 0x1Fu)
         {
             m_Bits = sign | 0x7F800000u | (mantissa << 13);
 
             if (mantissa != 0)
                 m_Bits |= 0x00400000u;
+
+            return;
         }
-        else
-        {
-            const auto floatExponent = exponent + (127u - 15u);
-            m_Bits = sign | (floatExponent << 23) | (mantissa << 13);
-        }
+
+        const auto floatExponent = exponent + (127u - 15u);
+        m_Bits = sign | (floatExponent << 23) | (mantissa << 13);
     }
+#endif
 
     inline f32::f32(float value) noexcept
     {
-        // TODO: Custom allocator support
         std::memcpy(&m_Bits, &value, sizeof(value));
     }
 
@@ -265,6 +311,7 @@ namespace lowp
     inline f32& f32::operator=(float value) noexcept
     {
         m_Bits = f32{value}.m_Bits;
+
         return *this;
     }
 }
@@ -277,3 +324,55 @@ namespace lowp
     inline constexpr int version_minor = 1;
     inline constexpr int version_patch = 0;
 }
+
+// ---- lowp/simd.hpp ----
+
+#include <cstddef>
+
+
+#if LOWP_HAS_F16C
+
+namespace lowp::simd
+{
+    inline constexpr std::size_t Width = 8;
+
+    [[nodiscard]]
+    inline __m256 Load8AsFloat(const float* source) noexcept
+    {
+        return _mm256_loadu_ps(source);
+    }
+
+    [[nodiscard]]
+    inline __m256 Load8AsFloat(const f16* source) noexcept
+    {
+        const auto half = _mm_loadu_si128(reinterpret_cast<const __m128i*>(source));
+
+        return _mm256_cvtph_ps(half);
+    }
+
+    [[nodiscard]]
+    inline __m256 Load8AsFloat(const f32* source) noexcept
+    {
+        const auto bits = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(source));
+
+        return _mm256_castsi256_ps(bits);
+    }
+
+    inline void Store8FromFloat(float* destination, const __m256 value) noexcept
+    {
+        _mm256_storeu_ps(destination, value);
+    }
+
+    inline void Store8FromFloat(f16* destination, const __m256 value) noexcept
+    {
+        const auto half = _mm256_cvtps_ph(value, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(destination), half);
+    }
+
+    inline void Store8FromFloat(f32* destination, const __m256 value) noexcept
+    {
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(destination), _mm256_castps_si256(value));
+    }
+}
+#endif

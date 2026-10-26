@@ -23,9 +23,15 @@ namespace
     using lowp::simd::Load8AsFloat;
     using lowp::simd::Store8FromFloat;
 
-    template <class Function>
+    template <std::size_t AccumulatorCount = 0, class Function>
     void DispatchAccumulatorCount(Function&& function)
     {
+        if constexpr (AccumulatorCount != 0)
+        {
+            function.template operator()<AccumulatorCount>();
+            return;
+        }
+
         static const bool zen3 = Utils::IsZen3();
 
         if (zen3)
@@ -471,7 +477,7 @@ namespace Math
             std::size_t p{};
             const auto headOffset = h * headDimension;
 #if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
-            DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
+            DispatchAccumulatorCount<4>([&]<std::size_t AccumulatorCount>
             {
                 constexpr std::size_t vectorWidth = 8;
                 constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;

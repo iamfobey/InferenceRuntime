@@ -85,7 +85,7 @@ int main(const int argc, char** argv)
 {
     spdlog::set_level(spdlog::level::off);
 
-    if (argc < 4)
+    if (argc < 5)
     {
         spdlog::error(
             "Usage: RuntimeBenchmark <backend driver> <architecture> <path to directory with model> <thread_count> [Google Benchmark options]");
@@ -93,11 +93,16 @@ int main(const int argc, char** argv)
         return 1;
     }
 
+    const auto backendDriver = argv[1];
+    const auto modelArchitecture = argv[2];
+    const auto modelPath = argv[3];
+    const auto threadCount = argv[4];
+
     RuntimeOptions options = {
-        .modelArchitecture = argv[2],
-        .backendDriver = argv[1],
+        .modelArchitecture = modelArchitecture,
+        .backendDriver = backendDriver,
         .cpuBackendOptions = {
-            .threadCount = std::atoi(argv[3])
+            .threadCount = std::atoi(threadCount)
         }
     };
 
@@ -118,7 +123,7 @@ int main(const int argc, char** argv)
             "ModelLoad",
             BenchmarkModelLoad,
             options,
-            argv[2])
+            modelPath)
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond);
 
@@ -126,7 +131,7 @@ int main(const int argc, char** argv)
             "GenerationTG",
             BenchmarkGenerationTG,
             options,
-            argv[2])
+            modelPath)
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond);
 

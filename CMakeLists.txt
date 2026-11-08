@@ -10,7 +10,7 @@ include(CheckCXXCompilerFlag)
 include(CTest)
 
 option(ENABLE_CUDA "Enable CUDA backend" ON)
-option(ENABLE_AVX2 "Enable AVX2" OFF)
+option(ENABLE_AVX2 "Enable AVX2" ON)
 option(BUILD_BENCHMARKS "Build runtime benchmarks" ON)
 
 if (ENABLE_CUDA)

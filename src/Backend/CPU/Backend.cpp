@@ -11,7 +11,6 @@
 #include "Backend/CPU/Buffer.hpp"
 #include "Math/MathCPU.hpp"
 #include "Utils/Utils.hpp"
-#include "Utils/Converters.hpp"
 
 CpuBackend::CpuBackend(const CpuBackendOptions options) :
     m_Options(options),
@@ -56,9 +55,15 @@ void CpuBackend::Upload(Tensor& destination, const std::span<const float> source
 
     switch (destination.dataType)
     {
-    case DataType::Float16: Utils::Converters::ConvertFloat32ToFloat16(source.data(), destination.Float16Data(),
-                                                                       source.size());
+    case DataType::Float16:
+    {
+        auto* data = destination.Data<lowp::f16>();
+
+        for (std::size_t i{}; i < source.size(); ++i)
+            data[i] = source[i];
+
         break;
+    }
     case DataType::Float32: std::memcpy(destination.FloatData(), source.data(), source.size_bytes());
         break;
     }
@@ -75,9 +80,15 @@ void CpuBackend::Download(const Tensor& source, const std::span<float> destinati
 
     switch (source.dataType)
     {
-    case DataType::Float16: Utils::Converters::ConvertFloat16ToFloat32(source.Float16Data(), destination.data(),
-                                                                       destination.size());
+    case DataType::Float16:
+    {
+        const auto* data = source.Data<lowp::f16>();
+
+        for (std::size_t i{}; i < destination.size(); ++i)
+            destination[i] = static_cast<float>(data[i]);
+
         break;
+    }
     case DataType::Float32: std::memcpy(destination.data(), source.FloatData(), destination.size_bytes());
         break;
     }

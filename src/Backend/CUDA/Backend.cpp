@@ -33,7 +33,7 @@ DeviceType CudaBackend::Device() const noexcept
 
 Tensor CudaBackend::CreateTensor(TensorDimVec shape, const DataType dataType)
 {
-    const auto bytes = Math::CheckedMultiply(Utils::ElementCount(shape), Utils::DataTypeSize(dataType));
+    const auto bytes = Math::CPU::CheckedMultiply(Utils::ElementCount(shape), Utils::DataTypeSize(dataType));
 
     Tensor tensor = {
         .shape = std::move(shape),
@@ -114,7 +114,7 @@ void CudaBackend::Embedding(const Tensor& embeddingTable, const std::span<const 
     const auto vocabularySize = embeddingTable.shape[0];
     const auto hiddenSize = embeddingTable.shape[1];
     const auto tokenCount = tokenIds.size();
-    const auto expectedElementCount = Math::CheckedMultiply(tokenCount, hiddenSize);
+    const auto expectedElementCount = Math::CPU::CheckedMultiply(tokenCount, hiddenSize);
 
     if (Utils::ElementCount(output.shape) != expectedElementCount)
         throw std::invalid_argument("Embedding output element count does not match tokenCount * hiddenSize");
@@ -132,7 +132,7 @@ void CudaBackend::Embedding(const Tensor& embeddingTable, const std::span<const 
     if (tokenIds.empty() || hiddenSize == 0)
         return;
 
-    CudaBuffer deviceTokenIds(Math::CheckedMultiply(tokenCount, sizeof(std::int32_t)));
+    CudaBuffer deviceTokenIds(Math::CPU::CheckedMultiply(tokenCount, sizeof(std::int32_t)));
     CUDA_CHECK(cudaMemcpy(deviceTokenIds.Data(), tokenIds.data(), tokenIds.size_bytes(), cudaMemcpyHostToDevice));
 
     Math::CUDA::Embedding(static_cast<const std::byte*>(embeddingTable.buffer->Data()) + embeddingTable.byteOffset,
@@ -242,7 +242,7 @@ void CudaBackend::ComputeRoPECosSin(Tensor& sourceCos, Tensor& sourceSin, const 
     if (theta <= 0.0f)
         throw std::invalid_argument("RoPE theta must be positive");
 
-    const auto offset = Math::CheckedMultiply(position, headDimension / 2);
+    const auto offset = Math::CPU::CheckedMultiply(position, headDimension / 2);
     const auto pairCount = headDimension / 2;
 
     if (offset > Utils::ElementCount(sourceCos.shape) || pairCount > Utils::ElementCount(sourceCos.shape) - offset ||
@@ -266,10 +266,10 @@ void CudaBackend::RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inp
 
     if (headCount == 0 || headDimension == 0 || headDimension % 2 != 0)
         throw std::invalid_argument("RoPE requires positive headCount and even headDimension");
-    if (Utils::ElementCount(source.shape) != Math::CheckedMultiply(headCount, headDimension))
+    if (Utils::ElementCount(source.shape) != Math::CPU::CheckedMultiply(headCount, headDimension))
         throw std::invalid_argument("q sizes do not match headCount * headDimension");
 
-    const auto offset = Math::CheckedMultiply(position, headDimension / 2);
+    const auto offset = Math::CPU::CheckedMultiply(position, headDimension / 2);
     const auto pairCount = headDimension / 2;
 
     if (offset > Utils::ElementCount(inputCos.shape) || pairCount > Utils::ElementCount(inputCos.shape) - offset ||
@@ -335,7 +335,7 @@ void CudaBackend::CopyToCache(const Tensor& source, Tensor& cache, const std::si
     std::size_t cacheRowElementCount = 1;
 
     for (std::size_t i = 1; i < cache.shape.size(); ++i)
-        cacheRowElementCount = Math::CheckedMultiply(cacheRowElementCount, cache.shape[i]);
+        cacheRowElementCount = Math::CPU::CheckedMultiply(cacheRowElementCount, cache.shape[i]);
 
     const auto elementCount = Utils::ElementCount(source.shape);
 

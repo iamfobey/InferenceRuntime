@@ -120,7 +120,7 @@ namespace
 #endif
 }
 
-namespace Math
+namespace Math::CPU
 {
     template <class EmbeddingType, class OutputType>
     void Embedding(const EmbeddingType* pEmbeddingTable, const std::int32_t* pTokenIds, OutputType* pOutput,

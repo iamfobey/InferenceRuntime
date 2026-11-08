@@ -7,17 +7,17 @@
 class CudaBuffer final : public IBuffer
 {
 public:
-    explicit CudaBuffer(const std::size_t sizeBytes) :
+    explicit CudaBuffer(std::size_t sizeBytes) :
         m_SizeBytes(sizeBytes)
     {
         if (m_SizeBytes != 0)
-            CUDA_CHECK(cudaMalloc(&m_Data, m_SizeBytes));
+            CUDA_CHECK(cudaMalloc(&m_pData, m_SizeBytes));
     }
 
     ~CudaBuffer() override
     {
-        if (m_Data != nullptr)
-            cudaFree(m_Data);
+        if (m_pData != nullptr)
+            cudaFree(m_pData);
     }
 
     [[nodiscard]]
@@ -34,16 +34,16 @@ public:
 
     void* Data() noexcept override
     {
-        return m_Data;
+        return m_pData;
     }
 
     [[nodiscard]] const void* Data() const noexcept override
     {
-        return m_Data;
+        return m_pData;
     }
 
 private:
-    void* m_Data{};
+    void* m_pData{};
     std::size_t m_SizeBytes{};
 };
 #endif

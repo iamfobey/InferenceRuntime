@@ -16,7 +16,7 @@ class ITokenizer;
 struct RuntimeOptions
 {
     std::string_view modelArchitecture;
-    std::string backendDriver;
+    std::string backendDriver{"cpu"};
     CpuBackendOptions cpuBackendOptions;
 };
 

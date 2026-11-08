@@ -2,7 +2,7 @@
 
 #include <stdexcept>
 
-#include "Math/Math.hpp"
+#include "Math/MathCPU.hpp"
 #include "spdlog/spdlog.h"
 #include "Utils/Utils.hpp"
 
@@ -19,7 +19,7 @@ void Tensor::Validate(DeviceType requiredDeviceType) const
     if (byteOffset % alignment != 0)
         throw std::invalid_argument(name + " has an invalid byte offset");
 
-    const auto requiredBytes = Math::CheckedMultiply(Utils::ElementCount(shape), Utils::DataTypeSize(dataType));
+    const auto requiredBytes = Math::CPU::CheckedMultiply(Utils::ElementCount(shape), Utils::DataTypeSize(dataType));
 
     if (byteOffset > buffer->SizeBytes() || requiredBytes > buffer->SizeBytes() - byteOffset)
     {
@@ -61,7 +61,7 @@ Tensor Tensor::View(std::size_t offset, TensorDimVec viewShape) const
         .shape = std::move(viewShape),
         .strides = Utils::CreateContiguousStrides(result.shape),
         .buffer = buffer,
-        .byteOffset = byteOffset + Math::CheckedMultiply(offset, Utils::DataTypeSize(dataType)),
+        .byteOffset = byteOffset + Math::CPU::CheckedMultiply(offset, Utils::DataTypeSize(dataType)),
         .dataType = dataType,
     };
 

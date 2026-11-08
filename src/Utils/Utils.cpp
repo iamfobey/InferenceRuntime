@@ -2,7 +2,7 @@
 
 #include <stdexcept>
 
-#include "Math/Math.hpp"
+#include "Math/MathCPU.hpp"
 
 namespace Utils
 {

@@ -8,7 +8,7 @@
 #include <lowp/lowp.hpp>
 
 #include "Utils/Utils.hpp"
-#include "Math/Math.hpp"
+#include "Math/MathCPU.hpp"
 
 #if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
 #include <immintrin.h>

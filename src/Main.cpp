@@ -15,26 +15,27 @@ int main(const int argc, char** argv)
 
     if (argc < 5)
     {
-        spdlog::error("Usage: InferenceRuntime <architecture> <path to directory with model> <prompt> <thread_count>");
+        spdlog::error("Usage: InferenceRuntime <backend driver> <architecture> <path to directory with model> <prompt> <thread_count>");
 
         return 1;
     }
 
-    const auto architecture = argv[1];
-    const auto modelPath = argv[2];
-    const auto prompt = argv[3];
-    const auto threadCount = argv[4];
+    const auto backendDriver = argv[1];
+    const auto architecture = argv[2];
+    const auto modelPath = argv[3];
+    const auto prompt = argv[4];
+    const auto threadCount = argv[5];
 
     try
     {
         Runtime runtime({
             .modelArchitecture = architecture,
-            .backendDriver = "cpu",
+            .backendDriver = backendDriver,
             .cpuBackendOptions = {
                 .threadCount = std::atoi(threadCount)
             }
         });
-
+        
         if (!runtime.LoadModel(modelPath))
         {
             spdlog::error("Failed to load model");

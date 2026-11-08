@@ -2,6 +2,24 @@
 
 #include "Core/Core.hpp"
 
+#if RUNTIME_ENABLE_CUDA
+#include <cuda_runtime.h>
+
+#include <stdexcept>
+#include <string>
+
+#define CUDA_CHECK(call)                                                                                               \
+do                                                                                                                 \
+{                                                                                                                  \
+const auto cudaResult = (call);                                                                                \
+if (cudaResult != cudaSuccess)                                                                                 \
+throw std::runtime_error(std::string(#call) + ": " + cudaGetErrorString(cudaResult));                     \
+} while (false)
+
+#define CUDA_CHECK_KERNEL() CUDA_CHECK(cudaGetLastError())
+#endif
+
+
 namespace Utils
 {
     [[nodiscard]]

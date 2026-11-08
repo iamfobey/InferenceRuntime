@@ -88,14 +88,14 @@ int main(const int argc, char** argv)
     if (argc < 4)
     {
         spdlog::error(
-            "Usage: RuntimeBenchmark <architecture> <path to directory with model> <thread_count> [Google Benchmark options]");
+            "Usage: RuntimeBenchmark <backend driver> <architecture> <path to directory with model> <thread_count> [Google Benchmark options]");
 
         return 1;
     }
 
     RuntimeOptions options = {
-        .modelArchitecture = argv[1],
-        .backendDriver = "cpu",
+        .modelArchitecture = argv[2],
+        .backendDriver = argv[1],
         .cpuBackendOptions = {
             .threadCount = std::atoi(argv[3])
         }
@@ -103,7 +103,7 @@ int main(const int argc, char** argv)
 
     std::vector benchmarkArguments = {argv[0]};
 
-    benchmarkArguments.insert(benchmarkArguments.end(), argv + 4, argv + argc);
+    benchmarkArguments.insert(benchmarkArguments.end(), argv + 5, argv + argc);
 
     auto benchmarkArgumentCount = static_cast<int>(benchmarkArguments.size());
 

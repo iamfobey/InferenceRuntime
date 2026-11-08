@@ -9,7 +9,7 @@
 #include <lowp/lowp.hpp>
 
 #include "Backend/CPU/Buffer.hpp"
-#include "Math/Math.hpp"
+#include "Math/MathCPU.hpp"
 #include "Utils/Utils.hpp"
 #include "Utils/Converters.hpp"
 
@@ -29,7 +29,8 @@ DeviceType CpuBackend::Device() const noexcept
 
 Tensor CpuBackend::CreateTensor(TensorDimVec shape, DataType dataType)
 {
-    const auto bytes = Math::CheckedMultiply(Utils::ElementCount(shape), Utils::DataTypeSize(dataType));
+    const auto bytes = Math::CPU::CheckedMultiply(Utils::ElementCount(shape), Utils::DataTypeSize(dataType));
+
     Tensor tensor = {
         .shape = std::move(shape),
         .strides = Utils::CreateContiguousStrides(tensor.shape),
@@ -50,7 +51,6 @@ void CpuBackend::Upload(Tensor& destination, const std::span<const float> source
 
     if (Utils::ElementCount(destination.shape) != source.size())
         throw std::invalid_argument("Upload source size does not match destination tensor");
-
     if (source.empty())
         return;
 
@@ -70,7 +70,6 @@ void CpuBackend::Download(const Tensor& source, const std::span<float> destinati
 
     if (Utils::ElementCount(source.shape) != destination.size())
         throw std::invalid_argument("Download destination size does not match source tensor");
-
     if (destination.empty())
         return;
 
@@ -113,8 +112,8 @@ void CpuBackend::Embedding(const Tensor& embeddingTable, const std::span<const s
 
     const auto dispatch = [&]<class EmbeddingType, class OutputType>()
     {
-        Math::Embedding(embeddingTable.Data<EmbeddingType>(), tokenIds.data(), output.Data<OutputType>(), tokenCount,
-                        vocabularySize, hiddenSize);
+        Math::CPU::Embedding(embeddingTable.Data<EmbeddingType>(), tokenIds.data(), output.Data<OutputType>(), tokenCount,
+                             vocabularySize, hiddenSize);
     };
 
     IR_DISPATCH_CASE(embeddingTable.dataType == DataType::Float16 && output.dataType == DataType::Float16,
@@ -143,7 +142,6 @@ void CpuBackend::Linear(const Tensor& weights, const Tensor& input, Tensor& outp
 
     if (Utils::ElementCount(input.shape) != matColumns)
         throw std::invalid_argument("input element count must equal weights matColumns");
-
     if (Utils::ElementCount(output.shape) != matRows)
         throw std::invalid_argument("output element count must equal weights matRows");
 
@@ -157,7 +155,7 @@ void CpuBackend::Linear(const Tensor& weights, const Tensor& input, Tensor& outp
                 output = output.Data<OutputType>(),
                 matColumns](const auto beginRow, const auto endRow)
             {
-                Math::LinearRange(weights, input, output, beginRow, endRow, matColumns);
+                Math::CPU::LinearRange(weights, input, output, beginRow, endRow, matColumns);
             });
     };
 
@@ -192,10 +190,9 @@ void CpuBackend::RMSNorm(const Tensor& input, const Tensor& weight, float epsilo
     if (input.shape != output.shape)
         throw std::invalid_argument("input and output must have equal shapes");
 
-    const auto elementCount = Utils::ElementCount(input.shape);
     const auto dispatch = [&]<class InputType, class WeightType, class OutputType>()
     {
-        Math::RMSNorm(input.Data<InputType>(), weight.Data<WeightType>(), epsilon, output.Data<OutputType>(), elementCount);
+        Math::CPU::RMSNorm(input.Data<InputType>(), weight.Data<WeightType>(), epsilon, output.Data<OutputType>(), Utils::ElementCount(input.shape));
     };
 
     IR_DISPATCH_CASE(input.dataType == DataType::Float16 && weight.dataType == DataType::Float16 && output.dataType == DataType::Float16,
@@ -229,10 +226,9 @@ void CpuBackend::Add(const Tensor& inputA, const Tensor& inputB, Tensor& output)
     if (inputA.shape != output.shape)
         throw std::invalid_argument("inputA and output must have equal shapes");
 
-    const auto elementCount = Utils::ElementCount(inputA.shape);
     const auto dispatch = [&]<class InputAType, class InputBType, class OutputType>()
     {
-        Math::Add(inputA.Data<InputAType>(), inputB.Data<InputBType>(), output.Data<OutputType>(), elementCount);
+        Math::CPU::Add(inputA.Data<InputAType>(), inputB.Data<InputBType>(), output.Data<OutputType>(), Utils::ElementCount(inputA.shape));
     };
 
     IR_DISPATCH_CASE(inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float16 && output.dataType == DataType::Float16,
@@ -266,10 +262,9 @@ void CpuBackend::Multiply(const Tensor& inputA, const Tensor& inputB, Tensor& ou
     if (inputA.shape != output.shape)
         throw std::invalid_argument("inputA and output must have equal shapes");
 
-    const auto elementCount = Utils::ElementCount(inputA.shape);
     const auto dispatch = [&]<class InputAType, class InputBType, class OutputType>()
     {
-        Math::Multiply(inputA.Data<InputAType>(), inputB.Data<InputBType>(), output.Data<OutputType>(), elementCount);
+        Math::CPU::Multiply(inputA.Data<InputAType>(), inputB.Data<InputBType>(), output.Data<OutputType>(), Utils::ElementCount(inputA.shape));
     };
 
     IR_DISPATCH_CASE(inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float16 && output.dataType == DataType::Float16,
@@ -301,15 +296,13 @@ void CpuBackend::SwiGLU(const Tensor& input, const Tensor& gateUp, Tensor& outpu
     if (input.shape != gateUp.shape || input.shape != output.shape)
         throw std::invalid_argument("input, gateUp and output must have equal shapes");
 
-    const auto elementCount = Utils::ElementCount(input.shape);
-
     const auto dispatch = [&]<class InputType, class GateUpType, class OutputType>()
     {
-        Math::SwiGLU(
+        Math::CPU::SwiGLU(
             input.Data<InputType>(),
             gateUp.Data<GateUpType>(),
             output.Data<OutputType>(),
-            elementCount);
+            Utils::ElementCount(input.shape));
     };
 
     IR_DISPATCH_CASE(
@@ -362,7 +355,7 @@ void CpuBackend::ComputeRoPECosSin(Tensor& sourceCos, Tensor& sourceSin, std::si
     const auto offset = position * (headDimension / 2);
     const auto dispatch = [&]<class CosType, class SinType>()
     {
-        Math::ComputeRoPECosSin(sourceCos.Data<CosType>() + offset, sourceSin.Data<SinType>() + offset, position, headDimension, theta);
+        Math::CPU::ComputeRoPECosSin(sourceCos.Data<CosType>() + offset, sourceSin.Data<SinType>() + offset, position, headDimension, theta);
     };
 
     IR_DISPATCH_CASE(sourceCos.dataType == DataType::Float16 && sourceSin.dataType == DataType::Float16, lowp::f16, lowp::f16)
@@ -382,17 +375,20 @@ void CpuBackend::RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inpu
 
     if (headCount == 0 || headDimension == 0 || headDimension % 2 != 0)
         throw std::invalid_argument("RoPE requires positive headCount and even headDimension");
-
-    const auto expectedElementCount = Math::CheckedMultiply(headCount, headDimension);
-
-    if (Utils::ElementCount(source.shape) != expectedElementCount)
+    if (Utils::ElementCount(source.shape) != Math::CPU::CheckedMultiply(headCount, headDimension))
         throw std::invalid_argument("q sizes do not match headCount * headDimension");
 
-    const auto offset = position * (headDimension / 2);
+    const auto offset = Math::CPU::CheckedMultiply(position, headDimension / 2);
+    const auto pairCount = headDimension / 2;
+
+    if (offset > Utils::ElementCount(inputCos.shape) || pairCount > Utils::ElementCount(inputCos.shape) - offset ||
+        offset > Utils::ElementCount(inputSin.shape) || pairCount > Utils::ElementCount(inputSin.shape) - offset)
+        throw std::out_of_range("RoPE position exceeds cosine or sine tensor");
+
     const auto dispatch = [&]<class SourceType, class CosType, class SinType>()
     {
-        Math::RoPE(source.Data<SourceType>(), inputCos.Data<CosType>() + offset, inputSin.Data<SinType>() + offset, headCount,
-                   headDimension);
+        Math::CPU::RoPE(source.Data<SourceType>(), inputCos.Data<CosType>() + offset, inputSin.Data<SinType>() + offset, headCount,
+                        headDimension);
     };
 
     IR_DISPATCH_CASE(source.dataType == DataType::Float16 && inputCos.dataType == DataType::Float16 && inputSin.dataType == DataType::Float16,
@@ -426,10 +422,8 @@ void CpuBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor& 
 
     if (attentionHeadCount == 0 || keyValueHeadCount == 0)
         throw std::invalid_argument("Attention head counts must be positive");
-
     if (attentionHeadCount % keyValueHeadCount != 0)
         throw std::invalid_argument("attentionHeadCount must be divisible by keyValueHeadCount");
-
     if (q.shape.size() != 2 || q.shape[0] != attentionHeadCount)
         throw std::invalid_argument("q must have shape [attentionHeadCount, headDimension]");
 
@@ -437,24 +431,19 @@ void CpuBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor& 
 
     if (headDimension == 0)
         throw std::invalid_argument("headDimension must be positive");
-
     if (output.shape != q.shape)
         throw std::invalid_argument("output shape must equal q shape");
-
     if (kCache.shape.size() != 3 || vCache.shape.size() != 3)
-        throw std::invalid_argument(
-            "kCache and vCache must have shape [contextLength, keyValueHeadCount, headDimension]");
-
+        throw std::invalid_argument("kCache and vCache must have shape [contextLength, keyValueHeadCount, headDimension]");
     if (kCache.shape != vCache.shape)
         throw std::invalid_argument("kCache and vCache must have equal shapes");
-
     if (kCache.shape[0] < validTokenCount || kCache.shape[1] != keyValueHeadCount || kCache.shape[2] != headDimension)
         throw std::invalid_argument("Cache shape does not match Attention parameters");
 
     const auto dispatch = [&]<class QType, class KType, class VType, class OutputType>()
     {
-        Math::Attention(q.Data<QType>(), kCache.Data<KType>(), vCache.Data<VType>(), output.Data<OutputType>(), validTokenCount,
-                        attentionHeadCount, keyValueHeadCount, headDimension);
+        Math::CPU::Attention(q.Data<QType>(), kCache.Data<KType>(), vCache.Data<VType>(), output.Data<OutputType>(), validTokenCount,
+                             attentionHeadCount, keyValueHeadCount, headDimension);
     };
 
     IR_DISPATCH_CASE(
@@ -532,22 +521,20 @@ void CpuBackend::CopyToCache(const Tensor& source, Tensor& cache, size_t positio
 
     if (cache.shape.size() < 2)
         throw std::invalid_argument("cache must have at least two dimensions");
-
     if (position >= cache.shape[0])
         throw std::out_of_range("Cache position exceeds cache capacity");
 
     std::size_t cacheRowElementCount = 1;
 
     for (std::size_t i = 1; i < cache.shape.size(); ++i)
-        cacheRowElementCount = Math::CheckedMultiply(cacheRowElementCount, cache.shape[i]);
+        cacheRowElementCount = Math::CPU::CheckedMultiply(cacheRowElementCount, cache.shape[i]);
 
     if (Utils::ElementCount(source.shape) != cacheRowElementCount)
         throw std::invalid_argument("source size does not match one cache position");
 
-    const auto elementCount = Utils::ElementCount(source.shape);
     const auto dispatch = [&]<class SourceType, class CacheType>()
     {
-        Math::CopyToCache(source.Data<SourceType>(), cache.Data<CacheType>(), position, elementCount);
+        Math::CPU::CopyToCache(source.Data<SourceType>(), cache.Data<CacheType>(), position, Utils::ElementCount(source.shape));
     };
 
     IR_DISPATCH_CASE(source.dataType == DataType::Float16 && cache.dataType == DataType::Float16, lowp::f16, lowp::f16)

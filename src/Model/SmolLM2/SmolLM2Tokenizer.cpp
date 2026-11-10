@@ -15,6 +15,26 @@ namespace
     {
         return (value >= 33 && value <= 126) || (value >= 161 && value <= 172) || (value >= 174 && value <= 255);
     }
+    
+    bool IsDigit(unsigned char character)
+    {
+        return character >= '0' && character <= '9';
+    }
+
+    bool IsWhitespace(unsigned char character)
+    {
+        return character == ' ' || character == '\n' || character == '\r' || character == '\t' || character == '\f' || character == '\v';
+    }
+
+    bool IsLetter(unsigned char character)
+    {
+        return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || character >= 0x80;
+    }
+
+    bool IsOther(unsigned char character)
+    {
+        return !IsWhitespace(character) && !IsLetter(character) && !IsDigit(character);
+    }
 
     void AppendUtf8(std::string& result, char32_t codePoint)
     {
@@ -120,26 +140,6 @@ namespace
         key.push_back('\0');
         key.append(right);
         return key;
-    }
-
-    bool IsDigit(unsigned char ch)
-    {
-        return ch >= '0' && ch <= '9';
-    }
-
-    bool IsWhitespace(unsigned char ch)
-    {
-        return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t' || ch == '\f' || ch == '\v';
-    }
-
-    bool IsLetter(unsigned char ch)
-    {
-        return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch >= 0x80;
-    }
-
-    bool IsOther(unsigned char ch)
-    {
-        return !IsWhitespace(ch) && !IsLetter(ch) && !IsDigit(ch);
     }
 
     void ByteLevelSplit(std::string_view text, std::vector<std::string_view>& result)
@@ -298,7 +298,7 @@ bool SmolLM2Tokenizer::Load(const std::filesystem::path& path)
     for (auto mergeValue : model["merges"].get_array())
     {
         const std::string_view merge = mergeValue.get_string();
-        const std::size_t separator = merge.find(' ');
+        std::size_t separator = merge.find(' ');
 
         if (separator == std::string_view::npos)
             throw std::runtime_error("Invalid BPE merge");
@@ -314,6 +314,8 @@ bool SmolLM2Tokenizer::Load(const std::filesystem::path& path)
 
 std::vector<std::int32_t> SmolLM2Tokenizer::Encode(std::string_view text) const
 {
+    // TODO: table of number -> text to reduce for loop
+
     std::vector<std::int32_t> tokens{};
 
     const auto encodeNormalText = [this, &tokens](std::string_view normalText)

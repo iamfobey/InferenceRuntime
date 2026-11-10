@@ -11,9 +11,6 @@
 class SmolLM2Model final : public IModel
 {
 public:
-    [[nodiscard]]
-    std::string_view Architecture() const noexcept override;
-
     bool Load(const std::filesystem::path& path, IBackend& backend) override;
 
     void Reset() override;
@@ -23,7 +20,10 @@ public:
     void DecodeStep(std::int32_t tokenId, IBackend& backend) override;
 
     [[nodiscard]]
-    const Tensor& Logits() const noexcept override;
+    std::string_view GetArchitecture() const noexcept override;
+
+    [[nodiscard]]
+    const Tensor& GetLogits() const noexcept override;
 
     SmolLM2Config Config;
 
@@ -64,7 +64,7 @@ private:
     Tensor m_GateUpFuse;
     Tensor m_Gate;
     Tensor m_Up;
-    
+
     Tensor m_FeedForward;
     Tensor m_DownOutput;
 

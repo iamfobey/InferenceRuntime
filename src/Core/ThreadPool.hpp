@@ -70,13 +70,13 @@ private:
 
         void operator()() const
         {
-            m_Invoke(m_Object);
+            m_pInvokeFunc(m_pObject);
         }
 
         [[nodiscard]]
         explicit operator bool() const noexcept
         {
-            return m_Object != nullptr;
+            return m_pObject != nullptr;
         }
 
     private:
@@ -93,40 +93,40 @@ private:
                 alignof(FunctionType) <= alignof(std::max_align_t) &&
                 std::is_nothrow_move_constructible_v<FunctionType>;
 
-            m_Invoke = [](void* object)
+            m_pInvokeFunc = [](void* pObj)
             {
-                (*static_cast<FunctionType*>(object))();
+                (*static_cast<FunctionType*>(pObj))();
             };
 
             if constexpr (useInlineStorage)
             {
-                m_Object = ::new(static_cast<void*>(m_Storage)) FunctionType(std::forward<Function>(function));
+                m_pObject = ::new(static_cast<void*>(m_Storage)) FunctionType(std::forward<Function>(function));
 
-                m_Move = [](void* source, void* destination)
+                m_pMoveFunc = [](void* pSrc, void* pDest)
                 {
-                    auto* sourceFunction = static_cast<FunctionType*>(source);
+                    auto* pSrcFunc = static_cast<FunctionType*>(pSrc);
 
-                    ::new(destination) FunctionType(std::move(*sourceFunction));
+                    ::new(pDest) FunctionType(std::move(*pSrcFunc));
 
-                    sourceFunction->~FunctionType();
+                    pSrcFunc->~FunctionType();
                 };
 
-                m_Destroy = [](void* object)
+                m_pDestroyFunc = [](void* pObj)
                 {
-                    static_cast<FunctionType*>(object)->~FunctionType();
+                    static_cast<FunctionType*>(pObj)->~FunctionType();
                 };
 
                 m_HeapAllocated = false;
             }
             else
             {
-                m_Object = new FunctionType(std::forward<Function>(function));
+                m_pObject = new FunctionType(std::forward<Function>(function));
 
-                m_Move = nullptr;
+                m_pMoveFunc = nullptr;
 
-                m_Destroy = [](void* object)
+                m_pDestroyFunc = [](void* pObj)
                 {
-                    delete static_cast<FunctionType*>(object);
+                    delete static_cast<FunctionType*>(pObj);
                 };
 
                 m_HeapAllocated = true;
@@ -135,13 +135,13 @@ private:
 
         void Reset() noexcept
         {
-            if (m_Object != nullptr)
-                m_Destroy(m_Object);
+            if (m_pObject != nullptr)
+                m_pDestroyFunc(m_pObject);
 
-            m_Object = nullptr;
-            m_Invoke = nullptr;
-            m_Move = nullptr;
-            m_Destroy = nullptr;
+            m_pObject = nullptr;
+            m_pInvokeFunc = nullptr;
+            m_pMoveFunc = nullptr;
+            m_pDestroyFunc = nullptr;
             m_HeapAllocated = false;
         }
 
@@ -150,36 +150,36 @@ private:
             if (!other)
                 return;
 
-            m_Invoke = other.m_Invoke;
-            m_Move = other.m_Move;
-            m_Destroy = other.m_Destroy;
+            m_pInvokeFunc = other.m_pInvokeFunc;
+            m_pMoveFunc = other.m_pMoveFunc;
+            m_pDestroyFunc = other.m_pDestroyFunc;
             m_HeapAllocated = other.m_HeapAllocated;
 
             if (other.m_HeapAllocated)
             {
-                m_Object = other.m_Object;
+                m_pObject = other.m_pObject;
             }
             else
             {
-                m_Move(other.m_Object, static_cast<void*>(m_Storage));
+                m_pMoveFunc(other.m_pObject, static_cast<void*>(m_Storage));
 
-                m_Object = static_cast<void*>(m_Storage);
+                m_pObject = static_cast<void*>(m_Storage);
             }
 
-            other.m_Object = nullptr;
-            other.m_Invoke = nullptr;
-            other.m_Move = nullptr;
-            other.m_Destroy = nullptr;
+            other.m_pObject = nullptr;
+            other.m_pInvokeFunc = nullptr;
+            other.m_pMoveFunc = nullptr;
+            other.m_pDestroyFunc = nullptr;
             other.m_HeapAllocated = false;
         }
 
         alignas(std::max_align_t) std::byte m_Storage[InlineTaskSize]{};
 
-        void* m_Object{};
+        void* m_pObject{};
 
-        InvokeFunction m_Invoke{};
-        MoveFunction m_Move{};
-        DestroyFunction m_Destroy{};
+        InvokeFunction m_pInvokeFunc{};
+        MoveFunction m_pMoveFunc{};
+        DestroyFunction m_pDestroyFunc{};
 
         bool m_HeapAllocated{};
     };
@@ -269,7 +269,7 @@ private:
     alignas(CacheLineSize) std::atomic<std::uint64_t> m_WorkEpoch{};
     alignas(CacheLineSize) std::atomic<bool> m_Stop{};
 
-    inline static thread_local ThreadPool* s_CurrentPool{};
+    inline static thread_local ThreadPool* s_pCurrentPool{};
     inline static thread_local std::size_t s_CurrentWorkerIndex{InvalidWorkerIndex};
     inline static thread_local std::size_t s_ParallelDepth{};
 };
@@ -285,7 +285,7 @@ void ThreadPool::ParallelFor(std::size_t begin, std::size_t end, Function&& func
 
     const auto workSize = end - begin;
 
-    if (m_ThreadCount == 1 || workSize <= grainSize || s_CurrentPool == this || s_ParallelDepth != 0)
+    if (m_ThreadCount == 1 || workSize <= grainSize || s_pCurrentPool == this || s_ParallelDepth != 0)
     {
         function(begin, end);
         return;

@@ -8,36 +8,36 @@
 
 namespace Math::CUDA
 {
-    void Embedding(const void* table, DataType tableType, const std::int32_t* tokenIds, void* output,
+    void Embedding(const void* pTable, DataType tableType, const std::int32_t* pTokenIds, void* pOutput,
                    DataType outputType, std::size_t tokenCount, std::size_t vocabularySize, std::size_t hiddenSize);
 
-    void Linear(const void* weights, DataType weightsType, const void* input, DataType inputType,
-                void* output, DataType outputType, std::size_t rows, std::size_t columns);
+    void Linear(const void* pWeights, DataType weightsType, const void* pInput, DataType inputType,
+                void* pOutput, DataType outputType, std::size_t rows, std::size_t columns);
 
-    void RMSNorm(const void* input, DataType inputType, const void* weight, DataType weightType,
-                 float epsilon, void* output, DataType outputType, std::size_t elementCount);
+    void RMSNorm(const void* pInput, DataType inputType, const void* pWeight, DataType weightType,
+                 float epsilon, void* pOutput, DataType outputType, std::size_t elementCount);
 
-    void Add(const void* inputA, DataType inputAType, const void* inputB, DataType inputBType,
-             void* output, DataType outputType, std::size_t elementCount);
+    void Add(const void* pInputA, DataType inputAType, const void* pInputB, DataType inputBType,
+             void* pOutput, DataType outputType, std::size_t elementCount);
 
-    void Multiply(const void* inputA, DataType inputAType, const void* inputB, DataType inputBType,
-                  void* output, DataType outputType, std::size_t elementCount);
+    void Multiply(const void* pInputA, DataType inputAType, const void* pInputB, DataType inputBType,
+                  void* pOutput, DataType outputType, std::size_t elementCount);
 
-    void SwiGLU(const void* input, DataType inputType, const void* gateUp, DataType gateUpType,
-                void* output, DataType outputType, std::size_t elementCount);
+    void SwiGLU(const void* pInput, DataType inputType, const void* pGateUp, DataType gateUpType,
+                void* pOutput, DataType outputType, std::size_t elementCount);
 
-    void ComputeRoPECosSin(void* sourceCos, DataType cosType, void* sourceSin, DataType sinType,
+    void ComputeRoPECosSin(void* pOutputCos, DataType outputCosType, void* pOutputSin, DataType outputSinType,
                            std::size_t position, std::size_t headDimension, float theta);
 
-    void RoPE(void* source, DataType sourceType, const void* inputCos, DataType cosType,
-              const void* inputSin, DataType sinType, std::size_t headCount, std::size_t headDimension);
+    void RoPE(void* pData, DataType dataType, const void* pInputCos, DataType inputCosType,
+              const void* pInputSin, DataType inputSinType, std::size_t headCount, std::size_t headDimension);
 
-    void Attention(const void* q, DataType qType, const void* kCache, DataType kType,
-                   const void* vCache, DataType vType, void* output, DataType outputType,
+    void Attention(const void* pQuery, DataType queryType, const void* pKCache, DataType kCacheType,
+                   const void* pVCache, DataType vCacheType, void* pOutput, DataType outputType,
                    std::size_t validTokenCount, std::size_t attentionHeadCount,
                    std::size_t keyValueHeadCount, std::size_t headDimension);
 
-    void CopyToCache(const void* source, DataType sourceType, void* cache, DataType cacheType,
+    void CopyToCache(const void* pSrc, DataType srcType, void* pCache, DataType cacheType,
                      std::size_t position, std::size_t elementCount);
 }
 #endif

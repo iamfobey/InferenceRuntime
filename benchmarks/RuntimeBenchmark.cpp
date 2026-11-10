@@ -55,7 +55,7 @@ namespace
         for (std::size_t i{}; i < 8; ++i)
             model->DecodeStep(BenchmarkToken, *backend);
 
-        benchmark::DoNotOptimize(model->Logits().FloatData());
+        benchmark::DoNotOptimize(model->GetLogits().FloatData());
 
         model->Reset();
 
@@ -70,7 +70,7 @@ namespace
 
             const auto end = std::chrono::steady_clock::now();
 
-            benchmark::DoNotOptimize(model->Logits().FloatData());
+            benchmark::DoNotOptimize(model->GetLogits().FloatData());
 
             const std::chrono::duration<double> elapsed = end - start;
 

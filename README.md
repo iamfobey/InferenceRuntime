@@ -1,6 +1,6 @@
 # InferenceRuntime
 
-Experimental C++20 CPU runtime for the SmolLM2 architecture. It loads a
+Experimental C++20 CPU/CUDA runtime for the SmolLM2 architecture. It loads a
 Hugging Face-compatible model directory and executes inference and optional AVX2/FMA/F16C acceleration.
 
 ## Supported build environments

@@ -11,7 +11,7 @@ void Tensor::Validate(DeviceType requiredDeviceType) const
     if (!buffer)
         throw std::invalid_argument(name + " has no buffer");
 
-    if (buffer->Device() != requiredDeviceType)
+    if (buffer->GetDeviceType() != requiredDeviceType)
         throw std::invalid_argument(name + " is not a required device type tensor");
 
     const auto alignment = dataType == DataType::Float16 ? alignof(std::uint16_t) : alignof(float);
@@ -21,10 +21,10 @@ void Tensor::Validate(DeviceType requiredDeviceType) const
 
     const auto requiredBytes = Math::CPU::CheckedMultiply(Utils::ElementCount(shape), Utils::DataTypeSize(dataType));
 
-    if (byteOffset > buffer->SizeBytes() || requiredBytes > buffer->SizeBytes() - byteOffset)
+    if (byteOffset > buffer->GetSize() || requiredBytes > buffer->GetSize() - byteOffset)
     {
         spdlog::error("Tensor '{}' exceeds buffer: required {} bytes, available {} bytes", name, requiredBytes,
-                      buffer->SizeBytes());
+                      buffer->GetSize());
         throw std::out_of_range(name + " exceeds its buffer");
     }
 }
@@ -34,7 +34,7 @@ float* Tensor::FloatData() const
     if (dataType != DataType::Float32)
         throw std::logic_error(name + " is not Float32");
 
-    return reinterpret_cast<float*>(static_cast<std::byte*>(buffer->Data()) + byteOffset);
+    return reinterpret_cast<float*>(static_cast<std::byte*>(buffer->GetData()) + byteOffset);
 }
 
 std::uint16_t* Tensor::Float16Data() const
@@ -42,7 +42,7 @@ std::uint16_t* Tensor::Float16Data() const
     if (dataType != DataType::Float16)
         throw std::logic_error(name + " is not Float16");
 
-    return reinterpret_cast<std::uint16_t*>(static_cast<std::byte*>(buffer->Data()) + byteOffset);
+    return reinterpret_cast<std::uint16_t*>(static_cast<std::byte*>(buffer->GetData()) + byteOffset);
 }
 
 Tensor Tensor::View(std::size_t offset, std::size_t count) const

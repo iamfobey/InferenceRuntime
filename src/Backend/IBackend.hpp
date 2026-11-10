@@ -15,9 +15,9 @@ public:
     [[nodiscard]]
     virtual Tensor CreateTensor(TensorDimVec shape, DataType dataType) = 0;
 
-    virtual void Upload(Tensor& destination, std::span<const float> source) = 0;
+    virtual void Upload(Tensor& dest, std::span<const float> src) = 0;
 
-    virtual void Download(const Tensor& source, std::span<float> destination) = 0;
+    virtual void Download(const Tensor& src, std::span<float> dest) = 0;
 
     virtual void Embedding(const Tensor& embeddingTable, std::span<const std::int32_t> tokenIds, Tensor& output) = 0;
 
@@ -31,17 +31,18 @@ public:
 
     virtual void SwiGLU(const Tensor& input, const Tensor&, Tensor& output) = 0;
 
-    virtual void ComputeRoPECosSin(Tensor& sourceCos, Tensor& sourceSin, std::size_t position, std::size_t headDimension,
+    virtual void ComputeRoPECosSin(Tensor& sourceCos, Tensor& sourceSin, std::size_t position,
+                                   std::size_t headDimension,
                                    float theta) = 0;
 
     virtual void RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inputSin, std::size_t headCount,
-                      size_t position, std::size_t headDimension) = 0;
+                      std::size_t position, std::size_t headDimension) = 0;
 
-    virtual void Attention(const Tensor& q, const Tensor& kCache, const Tensor& vCache,
-                           size_t validTokenCount, size_t attentionHeadCount, size_t keyValueHeadCount,
+    virtual void Attention(const Tensor& query, const Tensor& kCache, const Tensor& vCache,
+                           std::size_t validTokenCount, std::size_t attentionHeadCount, std::size_t keyValueHeadCount,
                            Tensor& output) = 0;
 
-    virtual void CopyToCache(const Tensor& source, Tensor& cache, size_t position) = 0;
+    virtual void CopyToCache(const Tensor& src, Tensor& dest, std::size_t position) = 0;
 
     virtual void Synchronize() = 0;
 };

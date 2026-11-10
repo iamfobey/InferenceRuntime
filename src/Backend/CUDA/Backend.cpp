@@ -31,7 +31,7 @@ DeviceType CudaBackend::Device() const noexcept
     return DeviceType::CUDA;
 }
 
-Tensor CudaBackend::CreateTensor(TensorDimVec shape, const DataType dataType)
+Tensor CudaBackend::CreateTensor(TensorDimVec shape, DataType dataType)
 {
     const auto bytes = Math::CPU::CheckedMultiply(Utils::ElementCount(shape), Utils::DataTypeSize(dataType));
 
@@ -49,57 +49,57 @@ Tensor CudaBackend::CreateTensor(TensorDimVec shape, const DataType dataType)
     return tensor;
 }
 
-void CudaBackend::Upload(Tensor& destination, const std::span<const float> source)
+void CudaBackend::Upload(Tensor& dest, const std::span<const float> src)
 {
-    destination.Validate(DeviceType::CUDA);
+    dest.Validate(DeviceType::CUDA);
 
-    if (Utils::ElementCount(destination.shape) != source.size())
+    if (Utils::ElementCount(dest.shape) != src.size())
         throw std::invalid_argument("Upload source size does not match destination tensor");
-    if (source.empty())
+    if (src.empty())
         return;
 
-    if (destination.dataType == DataType::Float32)
+    if (dest.dataType == DataType::Float32)
     {
-        CUDA_CHECK(cudaMemcpy(static_cast<std::byte*>(destination.buffer->Data()) + destination.byteOffset,
-            source.data(), source.size_bytes(), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(static_cast<std::byte*>(dest.buffer->GetData()) + dest.byteOffset,
+            src.data(), src.size_bytes(), cudaMemcpyHostToDevice));
     }
     else
     {
-        std::vector<lowp::f16> values(source.size());
+        std::vector<lowp::f16> values(src.size());
 
-        for (std::size_t i{}; i < source.size(); ++i)
-            values[i] = source[i];
+        for (std::size_t i{}; i < src.size(); ++i)
+            values[i] = src[i];
 
-        CUDA_CHECK(cudaMemcpy(static_cast<std::byte*>(destination.buffer->Data()) + destination.byteOffset,
-            values.data(), source.size_bytes() / 2, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(static_cast<std::byte*>(dest.buffer->GetData()) + dest.byteOffset,
+            values.data(), src.size_bytes() / 2, cudaMemcpyHostToDevice));
     }
 }
 
-void CudaBackend::Download(const Tensor& source, const std::span<float> destination)
+void CudaBackend::Download(const Tensor& src, const std::span<float> dest)
 {
-    source.Validate(DeviceType::CUDA);
+    src.Validate(DeviceType::CUDA);
 
-    if (Utils::ElementCount(source.shape) != destination.size())
+    if (Utils::ElementCount(src.shape) != dest.size())
         throw std::invalid_argument("Download destination size does not match source tensor");
-    if (destination.empty())
+    if (dest.empty())
         return;
 
-    if (source.dataType == DataType::Float32)
+    if (src.dataType == DataType::Float32)
     {
-        CUDA_CHECK(cudaMemcpy(destination.data(),
-            static_cast<const std::byte*>(source.buffer->Data()) + source.byteOffset,
-            destination.size_bytes(), cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(dest.data(),
+            static_cast<const std::byte*>(src.buffer->GetData()) + src.byteOffset,
+            dest.size_bytes(), cudaMemcpyDeviceToHost));
     }
     else
     {
-        std::vector<lowp::f16> values(destination.size());
+        std::vector<lowp::f16> values(dest.size());
 
         CUDA_CHECK(cudaMemcpy(values.data(),
-            static_cast<const std::byte*>(source.buffer->Data()) + source.byteOffset,
-            destination.size_bytes() / 2, cudaMemcpyDeviceToHost));
+            static_cast<const std::byte*>(src.buffer->GetData()) + src.byteOffset,
+            dest.size_bytes() / 2, cudaMemcpyDeviceToHost));
 
-        for (std::size_t i{}; i < destination.size(); ++i)
-            destination[i] = static_cast<float>(values[i]);
+        for (std::size_t i{}; i < dest.size(); ++i)
+            dest[i] = static_cast<float>(values[i]);
     }
 }
 
@@ -133,11 +133,11 @@ void CudaBackend::Embedding(const Tensor& embeddingTable, const std::span<const 
         return;
 
     CudaBuffer deviceTokenIds(Math::CPU::CheckedMultiply(tokenCount, sizeof(std::int32_t)));
-    CUDA_CHECK(cudaMemcpy(deviceTokenIds.Data(), tokenIds.data(), tokenIds.size_bytes(), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(deviceTokenIds.GetData(), tokenIds.data(), tokenIds.size_bytes(), cudaMemcpyHostToDevice));
 
-    Math::CUDA::Embedding(static_cast<const std::byte*>(embeddingTable.buffer->Data()) + embeddingTable.byteOffset,
-                          embeddingTable.dataType, static_cast<const std::int32_t*>(deviceTokenIds.Data()),
-                          static_cast<std::byte*>(output.buffer->Data()) + output.byteOffset, output.dataType,
+    Math::CUDA::Embedding(static_cast<const std::byte*>(embeddingTable.buffer->GetData()) + embeddingTable.byteOffset,
+                          embeddingTable.dataType, static_cast<const std::int32_t*>(deviceTokenIds.GetData()),
+                          static_cast<std::byte*>(output.buffer->GetData()) + output.byteOffset, output.dataType,
                           tokenCount, vocabularySize, hiddenSize);
 }
 
@@ -159,12 +159,12 @@ void CudaBackend::Linear(const Tensor& weights, const Tensor& input, Tensor& out
     if (Utils::ElementCount(output.shape) != rows)
         throw std::invalid_argument("output element count must equal weights matRows");
 
-    Math::CUDA::Linear(static_cast<const std::byte*>(weights.buffer->Data()) + weights.byteOffset, weights.dataType,
-                       static_cast<const std::byte*>(input.buffer->Data()) + input.byteOffset, input.dataType,
-                       static_cast<std::byte*>(output.buffer->Data()) + output.byteOffset, output.dataType, rows, columns);
+    Math::CUDA::Linear(static_cast<const std::byte*>(weights.buffer->GetData()) + weights.byteOffset, weights.dataType,
+                       static_cast<const std::byte*>(input.buffer->GetData()) + input.byteOffset, input.dataType,
+                       static_cast<std::byte*>(output.buffer->GetData()) + output.byteOffset, output.dataType, rows, columns);
 }
 
-void CudaBackend::RMSNorm(const Tensor& input, const Tensor& weight, const float epsilon, Tensor& output)
+void CudaBackend::RMSNorm(const Tensor& input, const Tensor& weight, float epsilon, Tensor& output)
 {
     input.Validate(DeviceType::CUDA);
     weight.Validate(DeviceType::CUDA);
@@ -176,9 +176,9 @@ void CudaBackend::RMSNorm(const Tensor& input, const Tensor& weight, const float
     if (input.shape != output.shape)
         throw std::invalid_argument("input and output must have equal shapes");
 
-    Math::CUDA::RMSNorm(static_cast<const std::byte*>(input.buffer->Data()) + input.byteOffset, input.dataType,
-                        static_cast<const std::byte*>(weight.buffer->Data()) + weight.byteOffset, weight.dataType,
-                        epsilon, static_cast<std::byte*>(output.buffer->Data()) + output.byteOffset, output.dataType,
+    Math::CUDA::RMSNorm(static_cast<const std::byte*>(input.buffer->GetData()) + input.byteOffset, input.dataType,
+                        static_cast<const std::byte*>(weight.buffer->GetData()) + weight.byteOffset, weight.dataType,
+                        epsilon, static_cast<std::byte*>(output.buffer->GetData()) + output.byteOffset, output.dataType,
                         Utils::ElementCount(input.shape));
 }
 
@@ -193,9 +193,9 @@ void CudaBackend::Add(const Tensor& inputA, const Tensor& inputB, Tensor& output
     if (inputA.shape != output.shape)
         throw std::invalid_argument("inputA and output must have equal shapes");
 
-    Math::CUDA::Add(static_cast<const std::byte*>(inputA.buffer->Data()) + inputA.byteOffset, inputA.dataType,
-                    static_cast<const std::byte*>(inputB.buffer->Data()) + inputB.byteOffset, inputB.dataType,
-                    static_cast<std::byte*>(output.buffer->Data()) + output.byteOffset, output.dataType,
+    Math::CUDA::Add(static_cast<const std::byte*>(inputA.buffer->GetData()) + inputA.byteOffset, inputA.dataType,
+                    static_cast<const std::byte*>(inputB.buffer->GetData()) + inputB.byteOffset, inputB.dataType,
+                    static_cast<std::byte*>(output.buffer->GetData()) + output.byteOffset, output.dataType,
                     Utils::ElementCount(inputA.shape));
 }
 
@@ -210,9 +210,9 @@ void CudaBackend::Multiply(const Tensor& inputA, const Tensor& inputB, Tensor& o
     if (inputA.shape != output.shape)
         throw std::invalid_argument("inputA and output must have equal shapes");
 
-    Math::CUDA::Multiply(static_cast<const std::byte*>(inputA.buffer->Data()) + inputA.byteOffset, inputA.dataType,
-                         static_cast<const std::byte*>(inputB.buffer->Data()) + inputB.byteOffset, inputB.dataType,
-                         static_cast<std::byte*>(output.buffer->Data()) + output.byteOffset, output.dataType,
+    Math::CUDA::Multiply(static_cast<const std::byte*>(inputA.buffer->GetData()) + inputA.byteOffset, inputA.dataType,
+                         static_cast<const std::byte*>(inputB.buffer->GetData()) + inputB.byteOffset, inputB.dataType,
+                         static_cast<std::byte*>(output.buffer->GetData()) + output.byteOffset, output.dataType,
                          Utils::ElementCount(inputA.shape));
 }
 
@@ -225,14 +225,14 @@ void CudaBackend::SwiGLU(const Tensor& input, const Tensor& gateUp, Tensor& outp
     if (input.shape != gateUp.shape || input.shape != output.shape)
         throw std::invalid_argument("input, gateUp and output must have equal shapes");
 
-    Math::CUDA::SwiGLU(static_cast<const std::byte*>(input.buffer->Data()) + input.byteOffset, input.dataType,
-                       static_cast<const std::byte*>(gateUp.buffer->Data()) + gateUp.byteOffset, gateUp.dataType,
-                       static_cast<std::byte*>(output.buffer->Data()) + output.byteOffset, output.dataType,
+    Math::CUDA::SwiGLU(static_cast<const std::byte*>(input.buffer->GetData()) + input.byteOffset, input.dataType,
+                       static_cast<const std::byte*>(gateUp.buffer->GetData()) + gateUp.byteOffset, gateUp.dataType,
+                       static_cast<std::byte*>(output.buffer->GetData()) + output.byteOffset, output.dataType,
                        Utils::ElementCount(input.shape));
 }
 
-void CudaBackend::ComputeRoPECosSin(Tensor& sourceCos, Tensor& sourceSin, const std::size_t position,
-                                    const std::size_t headDimension, const float theta)
+void CudaBackend::ComputeRoPECosSin(Tensor& sourceCos, Tensor& sourceSin, std::size_t position,
+                                    std::size_t headDimension, float theta)
 {
     sourceCos.Validate(DeviceType::CUDA);
     sourceSin.Validate(DeviceType::CUDA);
@@ -249,16 +249,16 @@ void CudaBackend::ComputeRoPECosSin(Tensor& sourceCos, Tensor& sourceSin, const 
         offset > Utils::ElementCount(sourceSin.shape) || pairCount > Utils::ElementCount(sourceSin.shape) - offset)
         throw std::out_of_range("RoPE position exceeds cosine or sine tensor");
 
-    Math::CUDA::ComputeRoPECosSin(static_cast<std::byte*>(sourceCos.buffer->Data()) + sourceCos.byteOffset +
+    Math::CUDA::ComputeRoPECosSin(static_cast<std::byte*>(sourceCos.buffer->GetData()) + sourceCos.byteOffset +
                                   offset * Utils::DataTypeSize(sourceCos.dataType),
                                   sourceCos.dataType,
-                                  static_cast<std::byte*>(sourceSin.buffer->Data()) + sourceSin.byteOffset +
+                                  static_cast<std::byte*>(sourceSin.buffer->GetData()) + sourceSin.byteOffset +
                                   offset * Utils::DataTypeSize(sourceSin.dataType),
                                   sourceSin.dataType, position, headDimension, theta);
 }
 
-void CudaBackend::RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inputSin, const std::size_t headCount,
-                       const std::size_t position, const std::size_t headDimension)
+void CudaBackend::RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inputSin, std::size_t headCount,
+                       std::size_t position, std::size_t headDimension)
 {
     source.Validate(DeviceType::CUDA);
     inputCos.Validate(DeviceType::CUDA);
@@ -276,21 +276,21 @@ void CudaBackend::RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inp
         offset > Utils::ElementCount(inputSin.shape) || pairCount > Utils::ElementCount(inputSin.shape) - offset)
         throw std::out_of_range("RoPE position exceeds cosine or sine tensor");
 
-    Math::CUDA::RoPE(static_cast<std::byte*>(source.buffer->Data()) + source.byteOffset, source.dataType,
-                     static_cast<const std::byte*>(inputCos.buffer->Data()) + inputCos.byteOffset +
+    Math::CUDA::RoPE(static_cast<std::byte*>(source.buffer->GetData()) + source.byteOffset, source.dataType,
+                     static_cast<const std::byte*>(inputCos.buffer->GetData()) + inputCos.byteOffset +
                      offset * Utils::DataTypeSize(inputCos.dataType),
                      inputCos.dataType,
-                     static_cast<const std::byte*>(inputSin.buffer->Data()) + inputSin.byteOffset +
+                     static_cast<const std::byte*>(inputSin.buffer->GetData()) + inputSin.byteOffset +
                      offset * Utils::DataTypeSize(inputSin.dataType),
                      inputSin.dataType,
                      headCount, headDimension);
 }
 
-void CudaBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor& vCache,
-                            const std::size_t validTokenCount, const std::size_t attentionHeadCount,
-                            const std::size_t keyValueHeadCount, Tensor& output)
+void CudaBackend::Attention(const Tensor& query, const Tensor& kCache, const Tensor& vCache,
+                            std::size_t validTokenCount, std::size_t attentionHeadCount,
+                            std::size_t keyValueHeadCount, Tensor& output)
 {
-    q.Validate(DeviceType::CUDA);
+    query.Validate(DeviceType::CUDA);
     kCache.Validate(DeviceType::CUDA);
     vCache.Validate(DeviceType::CUDA);
     output.Validate(DeviceType::CUDA);
@@ -299,14 +299,14 @@ void CudaBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor&
         throw std::invalid_argument("Attention head counts must be positive");
     if (attentionHeadCount % keyValueHeadCount != 0)
         throw std::invalid_argument("attentionHeadCount must be divisible by keyValueHeadCount");
-    if (q.shape.size() != 2 || q.shape[0] != attentionHeadCount)
+    if (query.shape.size() != 2 || query.shape[0] != attentionHeadCount)
         throw std::invalid_argument("q must have shape [attentionHeadCount, headDimension]");
 
-    const auto headDimension = q.shape[1];
+    const auto headDimension = query.shape[1];
 
     if (headDimension == 0)
         throw std::invalid_argument("headDimension must be positive");
-    if (output.shape != q.shape)
+    if (output.shape != query.shape)
         throw std::invalid_argument("output shape must equal q shape");
     if (kCache.shape.size() != 3 || vCache.shape.size() != 3)
         throw std::invalid_argument("kCache and vCache must have shape [contextLength, keyValueHeadCount, headDimension]");
@@ -315,37 +315,37 @@ void CudaBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor&
     if (kCache.shape[0] < validTokenCount || kCache.shape[1] != keyValueHeadCount || kCache.shape[2] != headDimension)
         throw std::invalid_argument("Cache shape does not match Attention parameters");
 
-    Math::CUDA::Attention(static_cast<const std::byte*>(q.buffer->Data()) + q.byteOffset, q.dataType,
-                          static_cast<const std::byte*>(kCache.buffer->Data()) + kCache.byteOffset, kCache.dataType,
-                          static_cast<const std::byte*>(vCache.buffer->Data()) + vCache.byteOffset, vCache.dataType,
-                          static_cast<std::byte*>(output.buffer->Data()) + output.byteOffset, output.dataType,
+    Math::CUDA::Attention(static_cast<const std::byte*>(query.buffer->GetData()) + query.byteOffset, query.dataType,
+                          static_cast<const std::byte*>(kCache.buffer->GetData()) + kCache.byteOffset, kCache.dataType,
+                          static_cast<const std::byte*>(vCache.buffer->GetData()) + vCache.byteOffset, vCache.dataType,
+                          static_cast<std::byte*>(output.buffer->GetData()) + output.byteOffset, output.dataType,
                           validTokenCount, attentionHeadCount, keyValueHeadCount, headDimension);
 }
 
-void CudaBackend::CopyToCache(const Tensor& source, Tensor& cache, const std::size_t position)
+void CudaBackend::CopyToCache(const Tensor& src, Tensor& dest, std::size_t position)
 {
-    source.Validate(DeviceType::CUDA);
-    cache.Validate(DeviceType::CUDA);
+    src.Validate(DeviceType::CUDA);
+    dest.Validate(DeviceType::CUDA);
 
-    if (cache.shape.size() < 2)
+    if (dest.shape.size() < 2)
         throw std::invalid_argument("cache must have at least two dimensions");
-    if (position >= cache.shape[0])
+    if (position >= dest.shape[0])
         throw std::out_of_range("Cache position exceeds cache capacity");
 
     std::size_t cacheRowElementCount = 1;
 
-    for (std::size_t i = 1; i < cache.shape.size(); ++i)
-        cacheRowElementCount = Math::CPU::CheckedMultiply(cacheRowElementCount, cache.shape[i]);
+    for (std::size_t i = 1; i < dest.shape.size(); ++i)
+        cacheRowElementCount = Math::CPU::CheckedMultiply(cacheRowElementCount, dest.shape[i]);
 
-    const auto elementCount = Utils::ElementCount(source.shape);
+    const auto elementCount = Utils::ElementCount(src.shape);
 
     if (elementCount != cacheRowElementCount)
         throw std::invalid_argument("source size does not match one cache position");
 
-    Math::CUDA::CopyToCache(static_cast<const std::byte*>(source.buffer->Data()) + source.byteOffset,
-                            source.dataType,
-                            static_cast<std::byte*>(cache.buffer->Data()) + cache.byteOffset,
-                            cache.dataType, position, elementCount);
+    Math::CUDA::CopyToCache(static_cast<const std::byte*>(src.buffer->GetData()) + src.byteOffset,
+                            src.dataType,
+                            static_cast<std::byte*>(dest.buffer->GetData()) + dest.byteOffset,
+                            dest.dataType, position, elementCount);
 }
 
 void CudaBackend::Synchronize()

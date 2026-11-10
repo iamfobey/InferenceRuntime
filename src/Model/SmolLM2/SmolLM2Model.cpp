@@ -15,11 +15,6 @@
 #include "Model/ITokenizer.hpp"
 #include "spdlog/spdlog.h"
 
-std::string_view SmolLM2Model::Architecture() const noexcept
-{
-    return "smollm2";
-}
-
 namespace
 {
     std::string ShapeString(const TensorDimVec& shape)
@@ -343,7 +338,12 @@ void SmolLM2Model::DecodeStep(std::int32_t tokenId, IBackend& backend)
     ++m_Position;
 }
 
-const Tensor& SmolLM2Model::Logits() const noexcept
+std::string_view SmolLM2Model::GetArchitecture() const noexcept
+{
+    return "smollm2";
+}
+
+const Tensor& SmolLM2Model::GetLogits() const noexcept
 {
     return m_Logits;
 }

@@ -21,23 +21,23 @@ public:
     }
 
     [[nodiscard]]
-    DeviceType Device() const noexcept override
+    DeviceType GetDeviceType() const noexcept override
     {
         return DeviceType::CUDA;
     }
 
     [[nodiscard]]
-    std::size_t SizeBytes() const noexcept override
+    std::size_t GetSize() const noexcept override
     {
         return m_SizeBytes;
     }
 
-    void* Data() noexcept override
+    void* GetData() noexcept override
     {
         return m_pData;
     }
 
-    [[nodiscard]] const void* Data() const noexcept override
+    [[nodiscard]] const void* GetData() const noexcept override
     {
         return m_pData;
     }

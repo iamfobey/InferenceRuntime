@@ -44,52 +44,52 @@ Tensor CpuBackend::CreateTensor(TensorDimVec shape, DataType dataType)
     return tensor;
 }
 
-void CpuBackend::Upload(Tensor& destination, const std::span<const float> source)
+void CpuBackend::Upload(Tensor& dest, const std::span<const float> src)
 {
-    destination.Validate(DeviceType::CPU);
+    dest.Validate(DeviceType::CPU);
 
-    if (Utils::ElementCount(destination.shape) != source.size())
+    if (Utils::ElementCount(dest.shape) != src.size())
         throw std::invalid_argument("Upload source size does not match destination tensor");
-    if (source.empty())
+    if (src.empty())
         return;
 
-    switch (destination.dataType)
+    switch (dest.dataType)
     {
     case DataType::Float16:
     {
-        auto* data = destination.Data<lowp::f16>();
+        auto* data = dest.Data<lowp::f16>();
 
-        for (std::size_t i{}; i < source.size(); ++i)
-            data[i] = source[i];
+        for (std::size_t i{}; i < src.size(); ++i)
+            data[i] = src[i];
 
         break;
     }
-    case DataType::Float32: std::memcpy(destination.FloatData(), source.data(), source.size_bytes());
+    case DataType::Float32: std::memcpy(dest.FloatData(), src.data(), src.size_bytes());
         break;
     }
 }
 
-void CpuBackend::Download(const Tensor& source, const std::span<float> destination)
+void CpuBackend::Download(const Tensor& src, const std::span<float> dest)
 {
-    source.Validate(DeviceType::CPU);
+    src.Validate(DeviceType::CPU);
 
-    if (Utils::ElementCount(source.shape) != destination.size())
+    if (Utils::ElementCount(src.shape) != dest.size())
         throw std::invalid_argument("Download destination size does not match source tensor");
-    if (destination.empty())
+    if (dest.empty())
         return;
 
-    switch (source.dataType)
+    switch (src.dataType)
     {
     case DataType::Float16:
     {
-        const auto* data = source.Data<lowp::f16>();
+        const auto* data = src.Data<lowp::f16>();
 
-        for (std::size_t i{}; i < destination.size(); ++i)
-            destination[i] = static_cast<float>(data[i]);
+        for (std::size_t i{}; i < dest.size(); ++i)
+            dest[i] = static_cast<float>(data[i]);
 
         break;
     }
-    case DataType::Float32: std::memcpy(destination.data(), source.FloatData(), destination.size_bytes());
+    case DataType::Float32: std::memcpy(dest.data(), src.FloatData(), dest.size_bytes());
         break;
     }
 }
@@ -123,7 +123,8 @@ void CpuBackend::Embedding(const Tensor& embeddingTable, const std::span<const s
 
     const auto dispatch = [&]<class EmbeddingType, class OutputType>()
     {
-        Math::CPU::Embedding(embeddingTable.Data<EmbeddingType>(), tokenIds.data(), output.Data<OutputType>(), tokenCount,
+        Math::CPU::Embedding(embeddingTable.Data<EmbeddingType>(), tokenIds.data(), output.Data<OutputType>(),
+                             tokenCount,
                              vocabularySize, hiddenSize);
     };
 
@@ -170,22 +171,38 @@ void CpuBackend::Linear(const Tensor& weights, const Tensor& input, Tensor& outp
             });
     };
 
-    IR_DISPATCH_CASE(weights.dataType == DataType::Float16 && input.dataType == DataType::Float16 && output.dataType == DataType::Float16,
-                     lowp::f16, lowp::f16, lowp::f16)
-    IR_DISPATCH_CASE(weights.dataType == DataType::Float16 && input.dataType == DataType::Float16 && output.dataType == DataType::Float32,
-                     lowp::f16, lowp::f16, lowp::f32)
-    IR_DISPATCH_CASE(weights.dataType == DataType::Float16 && input.dataType == DataType::Float32 && output.dataType == DataType::Float16,
-                     lowp::f16, lowp::f32, lowp::f16)
-    IR_DISPATCH_CASE(weights.dataType == DataType::Float16 && input.dataType == DataType::Float32 && output.dataType == DataType::Float32,
-                     lowp::f16, lowp::f32, lowp::f32)
-    IR_DISPATCH_CASE(weights.dataType == DataType::Float32 && input.dataType == DataType::Float16 && output.dataType == DataType::Float16,
-                     lowp::f32, lowp::f16, lowp::f16)
-    IR_DISPATCH_CASE(weights.dataType == DataType::Float32 && input.dataType == DataType::Float16 && output.dataType == DataType::Float32,
-                     lowp::f32, lowp::f16, lowp::f32)
-    IR_DISPATCH_CASE(weights.dataType == DataType::Float32 && input.dataType == DataType::Float32 && output.dataType == DataType::Float16,
-                     lowp::f32, lowp::f32, lowp::f16)
-    IR_DISPATCH_CASE(weights.dataType == DataType::Float32 && input.dataType == DataType::Float32 && output.dataType == DataType::Float32,
-                     lowp::f32, lowp::f32, lowp::f32)
+    IR_DISPATCH_CASE(
+        weights.dataType == DataType::Float16 && input.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float16,
+        lowp::f16, lowp::f16, lowp::f16)
+    IR_DISPATCH_CASE(
+        weights.dataType == DataType::Float16 && input.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float32,
+        lowp::f16, lowp::f16, lowp::f32)
+    IR_DISPATCH_CASE(
+        weights.dataType == DataType::Float16 && input.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float16,
+        lowp::f16, lowp::f32, lowp::f16)
+    IR_DISPATCH_CASE(
+        weights.dataType == DataType::Float16 && input.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float32,
+        lowp::f16, lowp::f32, lowp::f32)
+    IR_DISPATCH_CASE(
+        weights.dataType == DataType::Float32 && input.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float16,
+        lowp::f32, lowp::f16, lowp::f16)
+    IR_DISPATCH_CASE(
+        weights.dataType == DataType::Float32 && input.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float32,
+        lowp::f32, lowp::f16, lowp::f32)
+    IR_DISPATCH_CASE(
+        weights.dataType == DataType::Float32 && input.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float16,
+        lowp::f32, lowp::f32, lowp::f16)
+    IR_DISPATCH_CASE(
+        weights.dataType == DataType::Float32 && input.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float32,
+        lowp::f32, lowp::f32, lowp::f32)
 
     throw std::invalid_argument("Unsupported Linear data type combination");
 }
@@ -203,25 +220,42 @@ void CpuBackend::RMSNorm(const Tensor& input, const Tensor& weight, float epsilo
 
     const auto dispatch = [&]<class InputType, class WeightType, class OutputType>()
     {
-        Math::CPU::RMSNorm(input.Data<InputType>(), weight.Data<WeightType>(), epsilon, output.Data<OutputType>(), Utils::ElementCount(input.shape));
+        Math::CPU::RMSNorm(input.Data<InputType>(), weight.Data<WeightType>(), epsilon, output.Data<OutputType>(),
+                           Utils::ElementCount(input.shape));
     };
 
-    IR_DISPATCH_CASE(input.dataType == DataType::Float16 && weight.dataType == DataType::Float16 && output.dataType == DataType::Float16,
-                     lowp::f16, lowp::f16, lowp::f16)
-    IR_DISPATCH_CASE(input.dataType == DataType::Float16 && weight.dataType == DataType::Float16 && output.dataType == DataType::Float32,
-                     lowp::f16, lowp::f16, lowp::f32)
-    IR_DISPATCH_CASE(input.dataType == DataType::Float16 && weight.dataType == DataType::Float32 && output.dataType == DataType::Float16,
-                     lowp::f16, lowp::f32, lowp::f16)
-    IR_DISPATCH_CASE(input.dataType == DataType::Float16 && weight.dataType == DataType::Float32 && output.dataType == DataType::Float32,
-                     lowp::f16, lowp::f32, lowp::f32)
-    IR_DISPATCH_CASE(input.dataType == DataType::Float32 && weight.dataType == DataType::Float16 && output.dataType == DataType::Float16,
-                     lowp::f32, lowp::f16, lowp::f16)
-    IR_DISPATCH_CASE(input.dataType == DataType::Float32 && weight.dataType == DataType::Float16 && output.dataType == DataType::Float32,
-                     lowp::f32, lowp::f16, lowp::f32)
-    IR_DISPATCH_CASE(input.dataType == DataType::Float32 && weight.dataType == DataType::Float32 && output.dataType == DataType::Float16,
-                     lowp::f32, lowp::f32, lowp::f16)
-    IR_DISPATCH_CASE(input.dataType == DataType::Float32 && weight.dataType == DataType::Float32 && output.dataType == DataType::Float32,
-                     lowp::f32, lowp::f32, lowp::f32)
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float16 && weight.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float16,
+        lowp::f16, lowp::f16, lowp::f16)
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float16 && weight.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float32,
+        lowp::f16, lowp::f16, lowp::f32)
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float16 && weight.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float16,
+        lowp::f16, lowp::f32, lowp::f16)
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float16 && weight.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float32,
+        lowp::f16, lowp::f32, lowp::f32)
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float32 && weight.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float16,
+        lowp::f32, lowp::f16, lowp::f16)
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float32 && weight.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float32,
+        lowp::f32, lowp::f16, lowp::f32)
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float32 && weight.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float16,
+        lowp::f32, lowp::f32, lowp::f16)
+    IR_DISPATCH_CASE(
+        input.dataType == DataType::Float32 && weight.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float32,
+        lowp::f32, lowp::f32, lowp::f32)
 
     throw std::invalid_argument("Unsupported RMSNorm data type combination");
 }
@@ -239,25 +273,42 @@ void CpuBackend::Add(const Tensor& inputA, const Tensor& inputB, Tensor& output)
 
     const auto dispatch = [&]<class InputAType, class InputBType, class OutputType>()
     {
-        Math::CPU::Add(inputA.Data<InputAType>(), inputB.Data<InputBType>(), output.Data<OutputType>(), Utils::ElementCount(inputA.shape));
+        Math::CPU::Add(inputA.Data<InputAType>(), inputB.Data<InputBType>(), output.Data<OutputType>(),
+                       Utils::ElementCount(inputA.shape));
     };
 
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float16 && output.dataType == DataType::Float16,
-                     lowp::f16, lowp::f16, lowp::f16)
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float16 && output.dataType == DataType::Float32,
-                     lowp::f16, lowp::f16, lowp::f32)
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float32 && output.dataType == DataType::Float16,
-                     lowp::f16, lowp::f32, lowp::f16)
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float32 && output.dataType == DataType::Float32,
-                     lowp::f16, lowp::f32, lowp::f32)
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float16 && output.dataType == DataType::Float16,
-                     lowp::f32, lowp::f16, lowp::f16)
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float16 && output.dataType == DataType::Float32,
-                     lowp::f32, lowp::f16, lowp::f32)
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float32 && output.dataType == DataType::Float16,
-                     lowp::f32, lowp::f32, lowp::f16)
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float32 && output.dataType == DataType::Float32,
-                     lowp::f32, lowp::f32, lowp::f32)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float16,
+        lowp::f16, lowp::f16, lowp::f16)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float32,
+        lowp::f16, lowp::f16, lowp::f32)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float16,
+        lowp::f16, lowp::f32, lowp::f16)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float32,
+        lowp::f16, lowp::f32, lowp::f32)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float16,
+        lowp::f32, lowp::f16, lowp::f16)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float32,
+        lowp::f32, lowp::f16, lowp::f32)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float16,
+        lowp::f32, lowp::f32, lowp::f16)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float32,
+        lowp::f32, lowp::f32, lowp::f32)
 
     throw std::invalid_argument("Unsupported Add data type combination");
 }
@@ -275,25 +326,42 @@ void CpuBackend::Multiply(const Tensor& inputA, const Tensor& inputB, Tensor& ou
 
     const auto dispatch = [&]<class InputAType, class InputBType, class OutputType>()
     {
-        Math::CPU::Multiply(inputA.Data<InputAType>(), inputB.Data<InputBType>(), output.Data<OutputType>(), Utils::ElementCount(inputA.shape));
+        Math::CPU::Multiply(inputA.Data<InputAType>(), inputB.Data<InputBType>(), output.Data<OutputType>(),
+                            Utils::ElementCount(inputA.shape));
     };
 
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float16 && output.dataType == DataType::Float16,
-                     lowp::f16, lowp::f16, lowp::f16)
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float16 && output.dataType == DataType::Float32,
-                     lowp::f16, lowp::f16, lowp::f32)
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float32 && output.dataType == DataType::Float16,
-                     lowp::f16, lowp::f32, lowp::f16)
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float32 && output.dataType == DataType::Float32,
-                     lowp::f16, lowp::f32, lowp::f32)
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float16 && output.dataType == DataType::Float16,
-                     lowp::f32, lowp::f16, lowp::f16)
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float16 && output.dataType == DataType::Float32,
-                     lowp::f32, lowp::f16, lowp::f32)
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float32 && output.dataType == DataType::Float16,
-                     lowp::f32, lowp::f32, lowp::f16)
-    IR_DISPATCH_CASE(inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float32 && output.dataType == DataType::Float32,
-                     lowp::f32, lowp::f32, lowp::f32)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float16,
+        lowp::f16, lowp::f16, lowp::f16)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float32,
+        lowp::f16, lowp::f16, lowp::f32)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float16,
+        lowp::f16, lowp::f32, lowp::f16)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float16 && inputB.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float32,
+        lowp::f16, lowp::f32, lowp::f32)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float16,
+        lowp::f32, lowp::f16, lowp::f16)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float32,
+        lowp::f32, lowp::f16, lowp::f32)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float16,
+        lowp::f32, lowp::f32, lowp::f16)
+    IR_DISPATCH_CASE(
+        inputA.dataType == DataType::Float32 && inputB.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float32,
+        lowp::f32, lowp::f32, lowp::f32)
 
     throw std::invalid_argument("Unsupported Multiply data type combination");
 }
@@ -317,41 +385,50 @@ void CpuBackend::SwiGLU(const Tensor& input, const Tensor& gateUp, Tensor& outpu
     };
 
     IR_DISPATCH_CASE(
-        input.dataType == DataType::Float16 && gateUp.dataType == DataType::Float16 && output.dataType == DataType::Float16,
+        input.dataType == DataType::Float16 && gateUp.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float16,
         lowp::f16, lowp::f16, lowp::f16)
 
     IR_DISPATCH_CASE(
-        input.dataType == DataType::Float16 && gateUp.dataType == DataType::Float16 && output.dataType == DataType::Float32,
+        input.dataType == DataType::Float16 && gateUp.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float32,
         lowp::f16, lowp::f16, lowp::f32)
 
     IR_DISPATCH_CASE(
-        input.dataType == DataType::Float16 && gateUp.dataType == DataType::Float32 && output.dataType == DataType::Float16,
+        input.dataType == DataType::Float16 && gateUp.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float16,
         lowp::f16, lowp::f32, lowp::f16)
 
     IR_DISPATCH_CASE(
-        input.dataType == DataType::Float16 && gateUp.dataType == DataType::Float32 && output.dataType == DataType::Float32,
+        input.dataType == DataType::Float16 && gateUp.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float32,
         lowp::f16, lowp::f32, lowp::f32)
 
     IR_DISPATCH_CASE(
-        input.dataType == DataType::Float32 && gateUp.dataType == DataType::Float16 && output.dataType == DataType::Float16,
+        input.dataType == DataType::Float32 && gateUp.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float16,
         lowp::f32, lowp::f16, lowp::f16)
 
     IR_DISPATCH_CASE(
-        input.dataType == DataType::Float32 && gateUp.dataType == DataType::Float16 && output.dataType == DataType::Float32,
+        input.dataType == DataType::Float32 && gateUp.dataType == DataType::Float16 && output.dataType ==
+        DataType::Float32,
         lowp::f32, lowp::f16, lowp::f32)
 
     IR_DISPATCH_CASE(
-        input.dataType == DataType::Float32 && gateUp.dataType == DataType::Float32 && output.dataType == DataType::Float16,
+        input.dataType == DataType::Float32 && gateUp.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float16,
         lowp::f32, lowp::f32, lowp::f16)
 
     IR_DISPATCH_CASE(
-        input.dataType == DataType::Float32 && gateUp.dataType == DataType::Float32 && output.dataType == DataType::Float32,
+        input.dataType == DataType::Float32 && gateUp.dataType == DataType::Float32 && output.dataType ==
+        DataType::Float32,
         lowp::f32, lowp::f32, lowp::f32)
 
     throw std::invalid_argument("Unsupported SwiGLU data type combination");
 }
 
-void CpuBackend::ComputeRoPECosSin(Tensor& sourceCos, Tensor& sourceSin, std::size_t position, std::size_t headDimension,
+void CpuBackend::ComputeRoPECosSin(Tensor& sourceCos, Tensor& sourceSin, std::size_t position,
+                                   std::size_t headDimension,
                                    float theta)
 {
     sourceCos.Validate(DeviceType::CPU);
@@ -366,13 +443,18 @@ void CpuBackend::ComputeRoPECosSin(Tensor& sourceCos, Tensor& sourceSin, std::si
     const auto offset = position * (headDimension / 2);
     const auto dispatch = [&]<class CosType, class SinType>()
     {
-        Math::CPU::ComputeRoPECosSin(sourceCos.Data<CosType>() + offset, sourceSin.Data<SinType>() + offset, position, headDimension, theta);
+        Math::CPU::ComputeRoPECosSin(sourceCos.Data<CosType>() + offset, sourceSin.Data<SinType>() + offset, position,
+                                     headDimension, theta);
     };
 
-    IR_DISPATCH_CASE(sourceCos.dataType == DataType::Float16 && sourceSin.dataType == DataType::Float16, lowp::f16, lowp::f16)
-    IR_DISPATCH_CASE(sourceCos.dataType == DataType::Float16 && sourceSin.dataType == DataType::Float32, lowp::f16, lowp::f32)
-    IR_DISPATCH_CASE(sourceCos.dataType == DataType::Float32 && sourceSin.dataType == DataType::Float16, lowp::f32, lowp::f16)
-    IR_DISPATCH_CASE(sourceCos.dataType == DataType::Float32 && sourceSin.dataType == DataType::Float32, lowp::f32, lowp::f32)
+    IR_DISPATCH_CASE(sourceCos.dataType == DataType::Float16 && sourceSin.dataType == DataType::Float16, lowp::f16,
+                     lowp::f16)
+    IR_DISPATCH_CASE(sourceCos.dataType == DataType::Float16 && sourceSin.dataType == DataType::Float32, lowp::f16,
+                     lowp::f32)
+    IR_DISPATCH_CASE(sourceCos.dataType == DataType::Float32 && sourceSin.dataType == DataType::Float16, lowp::f32,
+                     lowp::f16)
+    IR_DISPATCH_CASE(sourceCos.dataType == DataType::Float32 && sourceSin.dataType == DataType::Float32, lowp::f32,
+                     lowp::f32)
 
     throw std::invalid_argument("Unsupported ComputeRoPECosSin data type combination");
 }
@@ -398,35 +480,52 @@ void CpuBackend::RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inpu
 
     const auto dispatch = [&]<class SourceType, class CosType, class SinType>()
     {
-        Math::CPU::RoPE(source.Data<SourceType>(), inputCos.Data<CosType>() + offset, inputSin.Data<SinType>() + offset, headCount,
+        Math::CPU::RoPE(source.Data<SourceType>(), inputCos.Data<CosType>() + offset, inputSin.Data<SinType>() + offset,
+                        headCount,
                         headDimension);
     };
 
-    IR_DISPATCH_CASE(source.dataType == DataType::Float16 && inputCos.dataType == DataType::Float16 && inputSin.dataType == DataType::Float16,
-                     lowp::f16, lowp::f16, lowp::f16)
-    IR_DISPATCH_CASE(source.dataType == DataType::Float16 && inputCos.dataType == DataType::Float16 && inputSin.dataType == DataType::Float32,
-                     lowp::f16, lowp::f16, lowp::f32)
-    IR_DISPATCH_CASE(source.dataType == DataType::Float16 && inputCos.dataType == DataType::Float32 && inputSin.dataType == DataType::Float16,
-                     lowp::f16, lowp::f32, lowp::f16)
-    IR_DISPATCH_CASE(source.dataType == DataType::Float16 && inputCos.dataType == DataType::Float32 && inputSin.dataType == DataType::Float32,
-                     lowp::f16, lowp::f32, lowp::f32)
-    IR_DISPATCH_CASE(source.dataType == DataType::Float32 && inputCos.dataType == DataType::Float16 && inputSin.dataType == DataType::Float16,
-                     lowp::f32, lowp::f16, lowp::f16)
-    IR_DISPATCH_CASE(source.dataType == DataType::Float32 && inputCos.dataType == DataType::Float16 && inputSin.dataType == DataType::Float32,
-                     lowp::f32, lowp::f16, lowp::f32)
-    IR_DISPATCH_CASE(source.dataType == DataType::Float32 && inputCos.dataType == DataType::Float32 && inputSin.dataType == DataType::Float16,
-                     lowp::f32, lowp::f32, lowp::f16)
-    IR_DISPATCH_CASE(source.dataType == DataType::Float32 && inputCos.dataType == DataType::Float32 && inputSin.dataType == DataType::Float32,
-                     lowp::f32, lowp::f32, lowp::f32)
+    IR_DISPATCH_CASE(
+        source.dataType == DataType::Float16 && inputCos.dataType == DataType::Float16 && inputSin.dataType ==
+        DataType::Float16,
+        lowp::f16, lowp::f16, lowp::f16)
+    IR_DISPATCH_CASE(
+        source.dataType == DataType::Float16 && inputCos.dataType == DataType::Float16 && inputSin.dataType ==
+        DataType::Float32,
+        lowp::f16, lowp::f16, lowp::f32)
+    IR_DISPATCH_CASE(
+        source.dataType == DataType::Float16 && inputCos.dataType == DataType::Float32 && inputSin.dataType ==
+        DataType::Float16,
+        lowp::f16, lowp::f32, lowp::f16)
+    IR_DISPATCH_CASE(
+        source.dataType == DataType::Float16 && inputCos.dataType == DataType::Float32 && inputSin.dataType ==
+        DataType::Float32,
+        lowp::f16, lowp::f32, lowp::f32)
+    IR_DISPATCH_CASE(
+        source.dataType == DataType::Float32 && inputCos.dataType == DataType::Float16 && inputSin.dataType ==
+        DataType::Float16,
+        lowp::f32, lowp::f16, lowp::f16)
+    IR_DISPATCH_CASE(
+        source.dataType == DataType::Float32 && inputCos.dataType == DataType::Float16 && inputSin.dataType ==
+        DataType::Float32,
+        lowp::f32, lowp::f16, lowp::f32)
+    IR_DISPATCH_CASE(
+        source.dataType == DataType::Float32 && inputCos.dataType == DataType::Float32 && inputSin.dataType ==
+        DataType::Float16,
+        lowp::f32, lowp::f32, lowp::f16)
+    IR_DISPATCH_CASE(
+        source.dataType == DataType::Float32 && inputCos.dataType == DataType::Float32 && inputSin.dataType ==
+        DataType::Float32,
+        lowp::f32, lowp::f32, lowp::f32)
 
     throw std::invalid_argument("Unsupported RoPE data type combination");
 }
 
-void CpuBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor& vCache,
+void CpuBackend::Attention(const Tensor& query, const Tensor& kCache, const Tensor& vCache,
                            size_t validTokenCount,
-                           size_t attentionHeadCount, size_t keyValueHeadCount, Tensor& output)
+                           size_t attentionHeadCount, std::size_t keyValueHeadCount, Tensor& output)
 {
-    q.Validate(DeviceType::CPU);
+    query.Validate(DeviceType::CPU);
     kCache.Validate(DeviceType::CPU);
     vCache.Validate(DeviceType::CPU);
     output.Validate(DeviceType::CPU);
@@ -435,14 +534,14 @@ void CpuBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor& 
         throw std::invalid_argument("Attention head counts must be positive");
     if (attentionHeadCount % keyValueHeadCount != 0)
         throw std::invalid_argument("attentionHeadCount must be divisible by keyValueHeadCount");
-    if (q.shape.size() != 2 || q.shape[0] != attentionHeadCount)
+    if (query.shape.size() != 2 || query.shape[0] != attentionHeadCount)
         throw std::invalid_argument("q must have shape [attentionHeadCount, headDimension]");
 
-    const auto headDimension = q.shape[1];
+    const auto headDimension = query.shape[1];
 
     if (headDimension == 0)
         throw std::invalid_argument("headDimension must be positive");
-    if (output.shape != q.shape)
+    if (output.shape != query.shape)
         throw std::invalid_argument("output shape must equal q shape");
     if (kCache.shape.size() != 3 || vCache.shape.size() != 3)
         throw std::invalid_argument("kCache and vCache must have shape [contextLength, keyValueHeadCount, headDimension]");
@@ -453,105 +552,123 @@ void CpuBackend::Attention(const Tensor& q, const Tensor& kCache, const Tensor& 
 
     const auto dispatch = [&]<class QType, class KType, class VType, class OutputType>()
     {
-        Math::CPU::Attention(q.Data<QType>(), kCache.Data<KType>(), vCache.Data<VType>(), output.Data<OutputType>(), validTokenCount,
+        Math::CPU::Attention(query.Data<QType>(), kCache.Data<KType>(), vCache.Data<VType>(), output.Data<OutputType>(),
+                             validTokenCount,
                              attentionHeadCount, keyValueHeadCount, headDimension);
     };
 
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float16 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float16 && output.dataType == DataType
+        query.dataType == DataType::Float16 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float16
+        && output.dataType == DataType
         ::Float16,
         lowp::f16, lowp::f16, lowp::f16, lowp::f16)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float16 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float16 && output.dataType == DataType
+        query.dataType == DataType::Float16 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float16
+        && output.dataType == DataType
         ::Float32,
         lowp::f16, lowp::f16, lowp::f16, lowp::f32)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float16 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float32 && output.dataType == DataType
+        query.dataType == DataType::Float16 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float32
+        && output.dataType == DataType
         ::Float16,
         lowp::f16, lowp::f16, lowp::f32, lowp::f16)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float16 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float32 && output.dataType == DataType
+        query.dataType == DataType::Float16 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float32
+        && output.dataType == DataType
         ::Float32,
         lowp::f16, lowp::f16, lowp::f32, lowp::f32)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float16 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float16 && output.dataType == DataType
+        query.dataType == DataType::Float16 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float16
+        && output.dataType == DataType
         ::Float16,
         lowp::f16, lowp::f32, lowp::f16, lowp::f16)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float16 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float16 && output.dataType == DataType
+        query.dataType == DataType::Float16 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float16
+        && output.dataType == DataType
         ::Float32,
         lowp::f16, lowp::f32, lowp::f16, lowp::f32)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float16 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float32 && output.dataType == DataType
+        query.dataType == DataType::Float16 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float32
+        && output.dataType == DataType
         ::Float16,
         lowp::f16, lowp::f32, lowp::f32, lowp::f16)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float16 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float32 && output.dataType == DataType
+        query.dataType == DataType::Float16 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float32
+        && output.dataType == DataType
         ::Float32,
         lowp::f16, lowp::f32, lowp::f32, lowp::f32)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float32 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float16 && output.dataType == DataType
+        query.dataType == DataType::Float32 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float16
+        && output.dataType == DataType
         ::Float16,
         lowp::f32, lowp::f16, lowp::f16, lowp::f16)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float32 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float16 && output.dataType == DataType
+        query.dataType == DataType::Float32 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float16
+        && output.dataType == DataType
         ::Float32,
         lowp::f32, lowp::f16, lowp::f16, lowp::f32)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float32 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float32 && output.dataType == DataType
+        query.dataType == DataType::Float32 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float32
+        && output.dataType == DataType
         ::Float16,
         lowp::f32, lowp::f16, lowp::f32, lowp::f16)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float32 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float32 && output.dataType == DataType
+        query.dataType == DataType::Float32 && kCache.dataType == DataType::Float16 && vCache.dataType == DataType::Float32
+        && output.dataType == DataType
         ::Float32,
         lowp::f32, lowp::f16, lowp::f32, lowp::f32)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float32 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float16 && output.dataType == DataType
+        query.dataType == DataType::Float32 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float16
+        && output.dataType == DataType
         ::Float16,
         lowp::f32, lowp::f32, lowp::f16, lowp::f16)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float32 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float16 && output.dataType == DataType
+        query.dataType == DataType::Float32 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float16
+        && output.dataType == DataType
         ::Float32,
         lowp::f32, lowp::f32, lowp::f16, lowp::f32)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float32 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float32 && output.dataType == DataType
+        query.dataType == DataType::Float32 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float32
+        && output.dataType == DataType
         ::Float16,
         lowp::f32, lowp::f32, lowp::f32, lowp::f16)
     IR_DISPATCH_CASE(
-        q.dataType == DataType::Float32 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float32 && output.dataType == DataType
+        query.dataType == DataType::Float32 && kCache.dataType == DataType::Float32 && vCache.dataType == DataType::Float32
+        && output.dataType == DataType
         ::Float32,
         lowp::f32, lowp::f32, lowp::f32, lowp::f32)
 
     throw std::invalid_argument("Unsupported Attention data type combination");
 }
 
-void CpuBackend::CopyToCache(const Tensor& source, Tensor& cache, size_t position)
+void CpuBackend::CopyToCache(const Tensor& src, Tensor& dest, std::size_t position)
 {
-    source.Validate(DeviceType::CPU);
-    cache.Validate(DeviceType::CPU);
+    src.Validate(DeviceType::CPU);
+    dest.Validate(DeviceType::CPU);
 
-    if (cache.shape.size() < 2)
+    if (dest.shape.size() < 2)
         throw std::invalid_argument("cache must have at least two dimensions");
-    if (position >= cache.shape[0])
+    if (position >= dest.shape[0])
         throw std::out_of_range("Cache position exceeds cache capacity");
 
     std::size_t cacheRowElementCount = 1;
 
-    for (std::size_t i = 1; i < cache.shape.size(); ++i)
-        cacheRowElementCount = Math::CPU::CheckedMultiply(cacheRowElementCount, cache.shape[i]);
+    for (std::size_t i = 1; i < dest.shape.size(); ++i)
+        cacheRowElementCount = Math::CPU::CheckedMultiply(cacheRowElementCount, dest.shape[i]);
 
-    if (Utils::ElementCount(source.shape) != cacheRowElementCount)
+    if (Utils::ElementCount(src.shape) != cacheRowElementCount)
         throw std::invalid_argument("source size does not match one cache position");
 
     const auto dispatch = [&]<class SourceType, class CacheType>()
     {
-        Math::CPU::CopyToCache(source.Data<SourceType>(), cache.Data<CacheType>(), position, Utils::ElementCount(source.shape));
+        Math::CPU::CopyToCache(src.Data<SourceType>(), dest.Data<CacheType>(), position,
+                               Utils::ElementCount(src.shape));
     };
 
-    IR_DISPATCH_CASE(source.dataType == DataType::Float16 && cache.dataType == DataType::Float16, lowp::f16, lowp::f16)
-    IR_DISPATCH_CASE(source.dataType == DataType::Float16 && cache.dataType == DataType::Float32, lowp::f16, lowp::f32)
-    IR_DISPATCH_CASE(source.dataType == DataType::Float32 && cache.dataType == DataType::Float16, lowp::f32, lowp::f16)
-    IR_DISPATCH_CASE(source.dataType == DataType::Float32 && cache.dataType == DataType::Float32, lowp::f32, lowp::f32)
+    IR_DISPATCH_CASE(src.dataType == DataType::Float16 && dest.dataType == DataType::Float16, lowp::f16, lowp::f16)
+    IR_DISPATCH_CASE(src.dataType == DataType::Float16 && dest.dataType == DataType::Float32, lowp::f16, lowp::f32)
+    IR_DISPATCH_CASE(src.dataType == DataType::Float32 && dest.dataType == DataType::Float16, lowp::f32, lowp::f16)
+    IR_DISPATCH_CASE(src.dataType == DataType::Float32 && dest.dataType == DataType::Float32, lowp::f32, lowp::f32)
 
     throw std::invalid_argument("Unsupported CopyToCache data type combination");
 }

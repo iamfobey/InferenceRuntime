@@ -13,6 +13,7 @@ namespace
     {
         if (type == DataType::Float16)
             return __half2float(static_cast<const __half*>(pSrc)[index]);
+
         return static_cast<const float*>(pSrc)[index];
     }
 
@@ -115,6 +116,7 @@ namespace
 
         const auto exponent = static_cast<float>(2 * p) / static_cast<float>(headDimension);
         const auto angle = static_cast<float>(position) / powf(theta, exponent);
+
         Write(pOutputCos, outputCosType, p, cosf(angle));
         Write(pOutputSin, outputSinType, p, sinf(angle));
     }
@@ -136,6 +138,7 @@ namespace
         const auto second = Read(pData, dataType, secondIndex);
         const auto cosAngle = Read(pInputCos, inputCosType, p);
         const auto sinAngle = Read(pInputSin, inputSinType, p);
+
         Write(pData, dataType, firstIndex, first * cosAngle - second * sinAngle);
         Write(pData, dataType, secondIndex, first * sinAngle + second * cosAngle);
     }
@@ -191,9 +194,11 @@ namespace
             {
                 const auto outputValue = Read(pOutput, outputType, qOffset + d);
                 const auto value = Read(pVCache, vCacheType, kvOffset + d);
+
                 Write(pOutput, outputType, qOffset + d, outputValue * correction + value * probability);
             }
         }
+
         const auto inverseProbabilitySum = 1.0f / probabilitySum;
 
         for (std::size_t d{}; d < headDimension; ++d)

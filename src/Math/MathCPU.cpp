@@ -56,10 +56,10 @@ namespace
         const auto hiQuad = _mm256_extractf128_ps(result, 1);
         const auto loQuad = _mm256_castps256_ps128(result);
         auto sum128 = _mm_add_ps(loQuad, hiQuad);
-
+        
         const auto shuf1 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(2, 3, 0, 1));
         sum128 = _mm_add_ps(sum128, shuf1);
-
+        
         const auto shuf2 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 0, 3, 2));
         sum128 = _mm_add_ps(sum128, shuf2);
 
@@ -199,6 +199,7 @@ namespace Math::CPU
                         const auto offset = column + accumulatorIndex * vectorWidth;
                         const auto input = Load8AsFloat(pInput + offset);
                         const auto matrix = Load8AsFloat(pMatRow + offset);
+
                         accumulators[accumulatorIndex] = _mm256_fmadd_ps(matrix, input, accumulators[accumulatorIndex]);
                     }
                 }
@@ -297,6 +298,7 @@ namespace Math::CPU
                     const auto xVec = Load8AsFloat(pInput + offset);
                     const auto weightVec = Load8AsFloat(pWeight + offset);
                     const auto normalized = _mm256_mul_ps(xVec, inverseRmsVec);
+
                     Store8FromFloat(pOutput + offset, _mm256_mul_ps(weightVec, normalized));
                 }
             }
@@ -304,8 +306,7 @@ namespace Math::CPU
 #endif
 
         for (; i < elementCount; ++i)
-            pOutput[i] = static_cast<OutputType>(static_cast<float>(pWeight[i]) * (static_cast<float>(pInput[i]) *
-                inverseRms));
+            pOutput[i] = static_cast<OutputType>(static_cast<float>(pWeight[i]) * (static_cast<float>(pInput[i]) * inverseRms));
     }
 
     template void RMSNorm<lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, float, lowp::f16*, std::size_t);
@@ -333,8 +334,7 @@ namespace Math::CPU
                 for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
                 {
                     const auto offset = i + accumulatorIndex * vectorWidth;
-                    Store8FromFloat(pOutput + offset,
-                                    _mm256_add_ps(Load8AsFloat(pInputA + offset), Load8AsFloat(pInputB + offset)));
+                    Store8FromFloat(pOutput + offset, _mm256_add_ps(Load8AsFloat(pInputA + offset), Load8AsFloat(pInputB + offset)));
                 }
             }
         });
@@ -369,8 +369,7 @@ namespace Math::CPU
                 for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
                 {
                     const auto offset = i + accumulatorIndex * vectorWidth;
-                    Store8FromFloat(pOutput + offset,
-                                    _mm256_mul_ps(Load8AsFloat(pInputA + offset), Load8AsFloat(pInputB + offset)));
+                    Store8FromFloat(pOutput + offset, _mm256_mul_ps(Load8AsFloat(pInputA + offset), Load8AsFloat(pInputB + offset)));
                 }
             }
         });
@@ -403,13 +402,13 @@ namespace Math::CPU
         std::size_t i{};
 
 #if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
-        const auto one = _mm256_set1_ps(1.0f);
-        const auto zero = _mm256_setzero_ps();
-
         DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
         {
             constexpr std::size_t vectorWidth = 8;
             constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+            const auto one = _mm256_set1_ps(1.0f);
+            const auto zero = _mm256_setzero_ps();
 
             for (; i + blockSize <= elementCount; i += blockSize)
             {
@@ -419,8 +418,8 @@ namespace Math::CPU
                     const auto input = Load8AsFloat(pInput + offset);
                     const auto gateUp = Load8AsFloat(pGateUp + offset);
                     const auto exp = exp256_ps(_mm256_sub_ps(zero, input));
-                    Store8FromFloat(pOutput + offset,
-                                    _mm256_mul_ps(_mm256_div_ps(input, _mm256_add_ps(one, exp)), gateUp));
+
+                    Store8FromFloat(pOutput + offset, _mm256_mul_ps(_mm256_div_ps(input, _mm256_add_ps(one, exp)), gateUp));
                 }
             }
         });
@@ -429,6 +428,7 @@ namespace Math::CPU
         for (; i < elementCount; ++i)
         {
             const auto input = static_cast<float>(pInput[i]);
+
             pOutput[i] = static_cast<OutputType>(input / (1.0f + std::exp(-input)) * static_cast<float>(pGateUp[i]));
         }
     }
@@ -456,6 +456,7 @@ namespace Math::CPU
             const auto exponent = static_cast<float>(2 * p) / static_cast<float>(headDimension);
             const auto inverseFrequency = 1.0f / std::pow(theta, exponent);
             const auto angle = static_cast<float>(position) * inverseFrequency;
+
             pOutputCos[p] = static_cast<OutputCosType>(std::cos(angle));
             pOutputSin[p] = static_cast<OutputSinType>(std::sin(angle));
         }
@@ -499,10 +500,8 @@ namespace Math::CPU
                         const auto cosAngle = Load8AsFloat(pInputCos + offset);
                         const auto sinAngle = Load8AsFloat(pInputSin + offset);
 
-                        Store8FromFloat(pData + firstIndex,
-                                        _mm256_sub_ps(_mm256_mul_ps(first, cosAngle), _mm256_mul_ps(second, sinAngle)));
-                        Store8FromFloat(pData + secondIndex,
-                                        _mm256_add_ps(_mm256_mul_ps(first, sinAngle), _mm256_mul_ps(second, cosAngle)));
+                        Store8FromFloat(pData + firstIndex, _mm256_sub_ps(_mm256_mul_ps(first, cosAngle), _mm256_mul_ps(second, sinAngle)));
+                        Store8FromFloat(pData + secondIndex, _mm256_add_ps(_mm256_mul_ps(first, sinAngle), _mm256_mul_ps(second, cosAngle)));
                     }
                 }
             });
@@ -514,7 +513,6 @@ namespace Math::CPU
                 const auto secondIndex = headOffset + halfDimension + p;
                 const auto first = static_cast<float>(pData[firstIndex]);
                 const auto second = static_cast<float>(pData[secondIndex]);
-
                 const auto cosAngle = static_cast<float>(pInputCos[p]);
                 const auto sinAngle = static_cast<float>(pInputSin[p]);
 
@@ -541,7 +539,6 @@ namespace Math::CPU
     {
         if (validTokenCount == 0 || attentionHeadCount == 0 || keyValueHeadCount == 0 || headDimension == 0)
             return;
-
         if (attentionHeadCount % keyValueHeadCount != 0)
             return;
 
@@ -552,10 +549,8 @@ namespace Math::CPU
         {
             const auto kvHead = h / groupSize;
             const auto qOffset = h * headDimension;
-
             auto currentMaximumScore = -std::numeric_limits<float>::infinity();
             float probabilitySum{};
-
             std::size_t d{};
 
 #if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
@@ -582,7 +577,6 @@ namespace Math::CPU
             for (std::size_t t{}; t < validTokenCount; ++t)
             {
                 const auto kvOffset = (t * keyValueHeadCount + kvHead) * headDimension;
-
                 float score{};
                 d = 0;
 
@@ -603,10 +597,9 @@ namespace Math::CPU
                         {
                             const auto offset = d + accumulatorIndex * vectorWidth;
 
-                            accumulators[accumulatorIndex] = _mm256_fmadd_ps(
-                                Load8AsFloat(pQuery + qOffset + offset),
-                                Load8AsFloat(pKCache + kvOffset + offset),
-                                accumulators[accumulatorIndex]);
+                            accumulators[accumulatorIndex] = _mm256_fmadd_ps(Load8AsFloat(pQuery + qOffset + offset),
+                                                                             Load8AsFloat(pKCache + kvOffset + offset),
+                                                                             accumulators[accumulatorIndex]);
                         }
                     }
 
@@ -615,8 +608,7 @@ namespace Math::CPU
 #endif
 
                 for (; d < headDimension; ++d)
-                    score += static_cast<float>(pQuery[qOffset + d]) * static_cast<float>(pKCache[kvOffset +
-                        d]);
+                    score += static_cast<float>(pQuery[qOffset + d]) * static_cast<float>(pKCache[kvOffset + d]);
 
                 score *= scale;
 
@@ -628,7 +620,6 @@ namespace Math::CPU
                 {
                     correction = std::exp(currentMaximumScore - score);
                     probability = 1.0f;
-
                     currentMaximumScore = score;
                 }
                 else
@@ -642,13 +633,13 @@ namespace Math::CPU
                 d = 0;
 
 #if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
-                const auto correctionVec = _mm256_set1_ps(correction);
-                const auto probabilityVec = _mm256_set1_ps(probability);
-
                 DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
                 {
                     constexpr std::size_t vectorWidth = 8;
                     constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+                    const auto correctionVec = _mm256_set1_ps(correction);
+                    const auto probabilityVec = _mm256_set1_ps(probability);
 
                     for (; d + blockSize <= headDimension; d += blockSize)
                     {
@@ -680,24 +671,21 @@ namespace Math::CPU
             d = 0;
 
 #if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
-            const auto inverseProbabilitySumVec = _mm256_set1_ps(inverseProbabilitySum);
-
             DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
             {
                 constexpr std::size_t vectorWidth = 8;
                 constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+                const auto inverseProbabilitySumVec = _mm256_set1_ps(inverseProbabilitySum);
 
                 for (; d + blockSize <= headDimension; d += blockSize)
                 {
                     for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
                     {
                         const auto offset = d + accumulatorIndex * vectorWidth;
-
                         const auto output = Load8AsFloat(pOutput + qOffset + offset);
 
-                        Store8FromFloat(
-                            pOutput + qOffset + offset,
-                            _mm256_mul_ps(output, inverseProbabilitySumVec));
+                        Store8FromFloat(pOutput + qOffset + offset, _mm256_mul_ps(output, inverseProbabilitySumVec));
                     }
                 }
             });

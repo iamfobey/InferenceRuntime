@@ -44,7 +44,7 @@ void ThreadPool::CpuRelax() noexcept
 
 void ThreadPool::WorkerLoop(std::size_t workerIndex)
 {
-    s_CurrentPool = this;
+    s_pCurrentPool = this;
     s_CurrentWorkerIndex = workerIndex;
 
     while (true)
@@ -90,7 +90,7 @@ void ThreadPool::WorkerLoop(std::size_t workerIndex)
     }
 
     s_CurrentWorkerIndex = InvalidWorkerIndex;
-    s_CurrentPool = nullptr;
+    s_pCurrentPool = nullptr;
 }
 
 void ThreadPool::Enqueue(Task task)
@@ -107,7 +107,7 @@ void ThreadPool::Enqueue(Task task)
 
     std::size_t queueIndex{};
 
-    if (s_CurrentPool == this && s_CurrentWorkerIndex < m_WorkerCount)
+    if (s_pCurrentPool == this && s_CurrentWorkerIndex < m_WorkerCount)
         queueIndex = s_CurrentWorkerIndex;
     else
         queueIndex = m_NextQueue.fetch_add(1, std::memory_order_relaxed) % m_WorkerCount;

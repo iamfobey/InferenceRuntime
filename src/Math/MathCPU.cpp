@@ -8,7 +8,7 @@
 #include <lowp/lowp.hpp>
 
 #include "Utils/Utils.hpp"
-#include "Math/Math.hpp"
+#include "Math/MathCPU.hpp"
 
 #if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
 #include <immintrin.h>
@@ -43,27 +43,27 @@ namespace
         function.template operator()<4>();
     }
 
-    void AccumulatorsTo1Float(const __m256* accumulators, std::size_t accumulatorCount, float* output)
+    void AccumulatorsTo1Float(const __m256* pSrc, std::size_t accumulatorCount, float* pDest)
     {
         if (accumulatorCount == 0)
             return;
 
-        auto result = accumulators[0];
+        auto result = pSrc[0];
 
         for (std::size_t accumulatorIndex = 1; accumulatorIndex < accumulatorCount; ++accumulatorIndex)
-            result = _mm256_add_ps(result, accumulators[accumulatorIndex]);
+            result = _mm256_add_ps(result, pSrc[accumulatorIndex]);
 
         const auto hiQuad = _mm256_extractf128_ps(result, 1);
         const auto loQuad = _mm256_castps256_ps128(result);
         auto sum128 = _mm_add_ps(loQuad, hiQuad);
-
+        
         const auto shuf1 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(2, 3, 0, 1));
         sum128 = _mm_add_ps(sum128, shuf1);
-
+        
         const auto shuf2 = _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 0, 3, 2));
         sum128 = _mm_add_ps(sum128, shuf2);
 
-        _mm_store_ss(output, sum128);
+        _mm_store_ss(pDest, sum128);
     }
 
     struct Exp256PsConstants
@@ -88,13 +88,15 @@ namespace
     } exp256_ps_constants;
 
     // TODO: naive realization of std::exp -> normal
+    // https://github.com/JishinMaster/simd_utils/tree/master
     __m256 exp256_ps(__m256 x)
     {
         x = _mm256_min_ps(x, exp256_ps_constants.maxExp);
         x = _mm256_max_ps(x, exp256_ps_constants.minExp);
 
         // n = round(x / ln(2))
-        const auto fx = _mm256_round_ps(_mm256_mul_ps(x, exp256_ps_constants.invLn2), _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+        const auto fx = _mm256_round_ps(_mm256_mul_ps(x, exp256_ps_constants.invLn2),
+                                        _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
         const auto n = _mm256_cvtps_epi32(fx);
 
         // r = x - n * ln(2)
@@ -120,11 +122,11 @@ namespace
 #endif
 }
 
-namespace Math
+namespace Math::CPU
 {
     template <class EmbeddingType, class OutputType>
-    void Embedding(const EmbeddingType* pEmbeddingTable, const std::int32_t* pTokenIds, OutputType* pOutput,
-                   size_t tokenCount, size_t vocabularySize, size_t hiddenSize)
+    void Embedding(const EmbeddingType* pTable, const std::int32_t* pTokenIds, OutputType* pOutput,
+                   std::size_t tokenCount, std::size_t vocabularySize, std::size_t hiddenSize)
     {
         for (std::size_t t{}; t < tokenCount; ++t)
         {
@@ -153,24 +155,25 @@ namespace Math
                     for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
                     {
                         const auto offset = i + accumulatorIndex * vectorWidth;
-                        Store8FromFloat(pOutput + destinationOffset + offset, Load8AsFloat(pEmbeddingTable + sourceOffset + offset));
+                        Store8FromFloat(pOutput + destinationOffset + offset,
+                                        Load8AsFloat(pTable + sourceOffset + offset));
                     }
                 }
             });
 #endif
 
             for (; i < hiddenSize; ++i)
-                pOutput[destinationOffset + i] = static_cast<OutputType>(static_cast<float>(pEmbeddingTable[sourceOffset + i]));
+                pOutput[destinationOffset + i] = static_cast<OutputType>(static_cast<float>(pTable[sourceOffset + i]));
         }
     }
 
-    template void Embedding<lowp::f16, lowp::f16>(const lowp::f16*, const std::int32_t*, lowp::f16*, size_t, size_t, size_t);
-    template void Embedding<lowp::f16, lowp::f32>(const lowp::f16*, const std::int32_t*, lowp::f32*, size_t, size_t, size_t);
-    template void Embedding<lowp::f32, lowp::f16>(const lowp::f32*, const std::int32_t*, lowp::f16*, size_t, size_t, size_t);
-    template void Embedding<lowp::f32, lowp::f32>(const lowp::f32*, const std::int32_t*, lowp::f32*, size_t, size_t, size_t);
+    template void Embedding<lowp::f16, lowp::f16>(const lowp::f16*, const std::int32_t*, lowp::f16*, std::size_t, std::size_t, std::size_t);
+    template void Embedding<lowp::f16, lowp::f32>(const lowp::f16*, const std::int32_t*, lowp::f32*, std::size_t, std::size_t, std::size_t);
+    template void Embedding<lowp::f32, lowp::f16>(const lowp::f32*, const std::int32_t*, lowp::f16*, std::size_t, std::size_t, std::size_t);
+    template void Embedding<lowp::f32, lowp::f32>(const lowp::f32*, const std::int32_t*, lowp::f32*, std::size_t, std::size_t, std::size_t);
 
     template <class WeightType, class InputType, class OutputType>
-    void LinearRange(const WeightType* pMatrix, const InputType* pInput, OutputType* pOutput,
+    void LinearRange(const WeightType* pWeights, const InputType* pInput, OutputType* pOutput,
                      std::size_t beginRow, std::size_t endRow, std::size_t columns)
     {
 #if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
@@ -181,7 +184,7 @@ namespace Math
 
             for (std::size_t row = beginRow; row < endRow; ++row)
             {
-                const auto* matrixRow = pMatrix + row * columns;
+                const auto* pMatRow = pWeights + row * columns;
                 std::size_t column{};
                 float sum{};
                 __m256 accumulators[AccumulatorCount];
@@ -195,7 +198,8 @@ namespace Math
                     {
                         const auto offset = column + accumulatorIndex * vectorWidth;
                         const auto input = Load8AsFloat(pInput + offset);
-                        const auto matrix = Load8AsFloat(matrixRow + offset);
+                        const auto matrix = Load8AsFloat(pMatRow + offset);
+
                         accumulators[accumulatorIndex] = _mm256_fmadd_ps(matrix, input, accumulators[accumulatorIndex]);
                     }
                 }
@@ -203,7 +207,7 @@ namespace Math
                 AccumulatorsTo1Float(accumulators, AccumulatorCount, &sum);
 
                 for (; column < columns; ++column)
-                    sum += static_cast<float>(matrixRow[column]) * static_cast<float>(pInput[column]);
+                    sum += static_cast<float>(pMatRow[column]) * static_cast<float>(pInput[column]);
 
                 pOutput[row] = static_cast<OutputType>(sum);
             }
@@ -211,11 +215,11 @@ namespace Math
 #else
         for (std::size_t row = beginRow; row < endRow; ++row)
         {
-            const auto* matrixRow = pMatrix + row * columns;
+            const auto* pMatRow = pWeights + row * columns;
             float sum{};
 
             for (std::size_t column{}; column < columns; ++column)
-                sum += static_cast<float>(matrixRow[column]) * static_cast<float>(pInput[column]);
+                sum += static_cast<float>(pMatRow[column]) * static_cast<float>(pInput[column]);
 
             pOutput[row] = static_cast<OutputType>(sum);
         }
@@ -232,7 +236,8 @@ namespace Math
     template void LinearRange<lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, lowp::f32*, std::size_t, std::size_t, std::size_t);
 
     template <class InputType, class WeightType, class OutputType>
-    void RMSNorm(const InputType* pInput, const WeightType* pWeight, float epsilon, OutputType* pOutput, size_t elementCount)
+    void RMSNorm(const InputType* pInput, const WeightType* pWeight, float epsilon, OutputType* pOutput,
+                 std::size_t elementCount)
     {
         if (elementCount == 0)
             return;
@@ -293,6 +298,7 @@ namespace Math
                     const auto xVec = Load8AsFloat(pInput + offset);
                     const auto weightVec = Load8AsFloat(pWeight + offset);
                     const auto normalized = _mm256_mul_ps(xVec, inverseRmsVec);
+
                     Store8FromFloat(pOutput + offset, _mm256_mul_ps(weightVec, normalized));
                 }
             }
@@ -303,17 +309,17 @@ namespace Math
             pOutput[i] = static_cast<OutputType>(static_cast<float>(pWeight[i]) * (static_cast<float>(pInput[i]) * inverseRms));
     }
 
-    template void RMSNorm<lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, float, lowp::f16*, size_t);
-    template void RMSNorm<lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, float, lowp::f32*, size_t);
-    template void RMSNorm<lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, float, lowp::f16*, size_t);
-    template void RMSNorm<lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, float, lowp::f32*, size_t);
-    template void RMSNorm<lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, float, lowp::f16*, size_t);
-    template void RMSNorm<lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, float, lowp::f32*, size_t);
-    template void RMSNorm<lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, float, lowp::f16*, size_t);
-    template void RMSNorm<lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, float, lowp::f32*, size_t);
+    template void RMSNorm<lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, float, lowp::f16*, std::size_t);
+    template void RMSNorm<lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, float, lowp::f32*, std::size_t);
+    template void RMSNorm<lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, float, lowp::f16*, std::size_t);
+    template void RMSNorm<lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, float, lowp::f32*, std::size_t);
+    template void RMSNorm<lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, float, lowp::f16*, std::size_t);
+    template void RMSNorm<lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, float, lowp::f32*, std::size_t);
+    template void RMSNorm<lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, float, lowp::f16*, std::size_t);
+    template void RMSNorm<lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, float, lowp::f32*, std::size_t);
 
     template <class InputAType, class InputBType, class OutputType>
-    void Add(const InputAType* pInputA, const InputBType* pInputB, OutputType* pOutput, size_t elementCount)
+    void Add(const InputAType* pInputA, const InputBType* pInputB, OutputType* pOutput, std::size_t elementCount)
     {
         std::size_t i{};
 
@@ -338,17 +344,17 @@ namespace Math
             pOutput[i] = static_cast<OutputType>(static_cast<float>(pInputA[i]) + static_cast<float>(pInputB[i]));
     }
 
-    template void Add<lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, lowp::f16*, size_t);
-    template void Add<lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, lowp::f32*, size_t);
-    template void Add<lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, lowp::f16*, size_t);
-    template void Add<lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, lowp::f32*, size_t);
-    template void Add<lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, lowp::f16*, size_t);
-    template void Add<lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, lowp::f32*, size_t);
-    template void Add<lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, lowp::f16*, size_t);
-    template void Add<lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, lowp::f32*, size_t);
+    template void Add<lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, lowp::f16*, std::size_t);
+    template void Add<lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, lowp::f32*, std::size_t);
+    template void Add<lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, lowp::f16*, std::size_t);
+    template void Add<lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, lowp::f32*, std::size_t);
+    template void Add<lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, lowp::f16*, std::size_t);
+    template void Add<lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, lowp::f32*, std::size_t);
+    template void Add<lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, lowp::f16*, std::size_t);
+    template void Add<lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, lowp::f32*, std::size_t);
 
     template <class InputAType, class InputBType, class OutputType>
-    void Multiply(const InputAType* pInputA, const InputBType* pInputB, OutputType* pOutput, size_t elementCount)
+    void Multiply(const InputAType* pInputA, const InputBType* pInputB, OutputType* pOutput, std::size_t elementCount)
     {
         std::size_t i{};
 
@@ -373,16 +379,16 @@ namespace Math
             pOutput[i] = static_cast<OutputType>(static_cast<float>(pInputA[i]) * static_cast<float>(pInputB[i]));
     }
 
-    template void Multiply<lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, lowp::f16*, size_t);
-    template void Multiply<lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, lowp::f32*, size_t);
-    template void Multiply<lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, lowp::f16*, size_t);
-    template void Multiply<lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, lowp::f32*, size_t);
-    template void Multiply<lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, lowp::f16*, size_t);
-    template void Multiply<lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, lowp::f32*, size_t);
-    template void Multiply<lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, lowp::f16*, size_t);
-    template void Multiply<lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, lowp::f32*, size_t);
+    template void Multiply<lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, lowp::f16*, std::size_t);
+    template void Multiply<lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, lowp::f32*, std::size_t);
+    template void Multiply<lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, lowp::f16*, std::size_t);
+    template void Multiply<lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, lowp::f32*, std::size_t);
+    template void Multiply<lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, lowp::f16*, std::size_t);
+    template void Multiply<lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, lowp::f32*, std::size_t);
+    template void Multiply<lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, lowp::f16*, std::size_t);
+    template void Multiply<lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, lowp::f32*, std::size_t);
 
-    std::size_t CheckedMultiply(size_t inputA, size_t inputB)
+    std::size_t CheckedMultiply(std::size_t inputA, std::size_t inputB)
     {
         if (inputA != 0 && inputB > std::numeric_limits<std::size_t>::max() / inputA)
             throw std::overflow_error("Tensor size overflow");
@@ -391,18 +397,18 @@ namespace Math
     }
 
     template <class InputType, class GateUpType, class OutputType>
-    void SwiGLU(const InputType* pInput, const GateUpType* pGateUp, OutputType* pOutput, size_t elementCount)
+    void SwiGLU(const InputType* pInput, const GateUpType* pGateUp, OutputType* pOutput, std::size_t elementCount)
     {
         std::size_t i{};
 
 #if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
-        const auto one = _mm256_set1_ps(1.0f);
-        const auto zero = _mm256_setzero_ps();
-
         DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
         {
             constexpr std::size_t vectorWidth = 8;
             constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+            const auto one = _mm256_set1_ps(1.0f);
+            const auto zero = _mm256_setzero_ps();
 
             for (; i + blockSize <= elementCount; i += blockSize)
             {
@@ -412,6 +418,7 @@ namespace Math
                     const auto input = Load8AsFloat(pInput + offset);
                     const auto gateUp = Load8AsFloat(pGateUp + offset);
                     const auto exp = exp256_ps(_mm256_sub_ps(zero, input));
+
                     Store8FromFloat(pOutput + offset, _mm256_mul_ps(_mm256_div_ps(input, _mm256_add_ps(one, exp)), gateUp));
                 }
             }
@@ -421,28 +428,23 @@ namespace Math
         for (; i < elementCount; ++i)
         {
             const auto input = static_cast<float>(pInput[i]);
+
             pOutput[i] = static_cast<OutputType>(input / (1.0f + std::exp(-input)) * static_cast<float>(pGateUp[i]));
         }
     }
 
-    template void SwiGLU<lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, lowp::f16*, size_t);
+    template void SwiGLU<lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, lowp::f16*, std::size_t);
+    template void SwiGLU<lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, lowp::f32*, std::size_t);
+    template void SwiGLU<lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, lowp::f16*, std::size_t);
+    template void SwiGLU<lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, lowp::f32*, std::size_t);
+    template void SwiGLU<lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, lowp::f16*, std::size_t);
+    template void SwiGLU<lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, lowp::f32*, std::size_t);
+    template void SwiGLU<lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, lowp::f16*, std::size_t);
+    template void SwiGLU<lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, lowp::f32*, std::size_t);
 
-    template void SwiGLU<lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, lowp::f32*, size_t);
-
-    template void SwiGLU<lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, lowp::f16*, size_t);
-
-    template void SwiGLU<lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, lowp::f32*, size_t);
-
-    template void SwiGLU<lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, lowp::f16*, size_t);
-
-    template void SwiGLU<lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, lowp::f32*, size_t);
-
-    template void SwiGLU<lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, lowp::f16*, size_t);
-
-    template void SwiGLU<lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, lowp::f32*, size_t);
-
-    template <class CosType, class SinType>
-    void ComputeRoPECosSin(CosType* pSourceCos, SinType* pSourceSin, std::size_t position, std::size_t headDimension, float theta)
+    template <class OutputCosType, class OutputSinType>
+    void ComputeRoPECosSin(OutputCosType* pOutputCos, OutputSinType* pOutputSin, std::size_t position,
+                           std::size_t headDimension, float theta)
     {
         if (headDimension == 0 || headDimension % 2 != 0)
             return;
@@ -454,8 +456,9 @@ namespace Math
             const auto exponent = static_cast<float>(2 * p) / static_cast<float>(headDimension);
             const auto inverseFrequency = 1.0f / std::pow(theta, exponent);
             const auto angle = static_cast<float>(position) * inverseFrequency;
-            pSourceCos[p] = static_cast<CosType>(std::cos(angle));
-            pSourceSin[p] = static_cast<SinType>(std::sin(angle));
+
+            pOutputCos[p] = static_cast<OutputCosType>(std::cos(angle));
+            pOutputSin[p] = static_cast<OutputSinType>(std::sin(angle));
         }
     }
 
@@ -464,8 +467,9 @@ namespace Math
     template void ComputeRoPECosSin<lowp::f32, lowp::f16>(lowp::f32*, lowp::f16*, std::size_t, std::size_t, float);
     template void ComputeRoPECosSin<lowp::f32, lowp::f32>(lowp::f32*, lowp::f32*, std::size_t, std::size_t, float);
 
-    template <class SourceType, class CosType, class SinType>
-    void RoPE(SourceType* pSource, const CosType* pInputCos, const SinType* pInputSin, size_t headCount, size_t headDimension)
+    template <class ValueType, class InputCosType, class InputSinType>
+    void RoPE(ValueType* pData, const InputCosType* pInputCos, const InputSinType* pInputSin, std::size_t headCount,
+              std::size_t headDimension)
     {
         if (headDimension == 0 || headDimension % 2 != 0)
             return;
@@ -490,14 +494,14 @@ namespace Math
 
                         const auto firstIndex = headOffset + offset;
                         const auto secondIndex = headOffset + halfDimension + offset;
-                        const auto first = Load8AsFloat(pSource + firstIndex);
-                        const auto second = Load8AsFloat(pSource + secondIndex);
+                        const auto first = Load8AsFloat(pData + firstIndex);
+                        const auto second = Load8AsFloat(pData + secondIndex);
 
                         const auto cosAngle = Load8AsFloat(pInputCos + offset);
                         const auto sinAngle = Load8AsFloat(pInputSin + offset);
 
-                        Store8FromFloat(pSource + firstIndex, _mm256_sub_ps(_mm256_mul_ps(first, cosAngle), _mm256_mul_ps(second, sinAngle)));
-                        Store8FromFloat(pSource + secondIndex, _mm256_add_ps(_mm256_mul_ps(first, sinAngle), _mm256_mul_ps(second, cosAngle)));
+                        Store8FromFloat(pData + firstIndex, _mm256_sub_ps(_mm256_mul_ps(first, cosAngle), _mm256_mul_ps(second, sinAngle)));
+                        Store8FromFloat(pData + secondIndex, _mm256_add_ps(_mm256_mul_ps(first, sinAngle), _mm256_mul_ps(second, cosAngle)));
                     }
                 }
             });
@@ -507,34 +511,34 @@ namespace Math
             {
                 const auto firstIndex = headOffset + p;
                 const auto secondIndex = headOffset + halfDimension + p;
-                const auto first = static_cast<float>(pSource[firstIndex]);
-                const auto second = static_cast<float>(pSource[secondIndex]);
-
+                const auto first = static_cast<float>(pData[firstIndex]);
+                const auto second = static_cast<float>(pData[secondIndex]);
                 const auto cosAngle = static_cast<float>(pInputCos[p]);
                 const auto sinAngle = static_cast<float>(pInputSin[p]);
 
-                pSource[firstIndex] = static_cast<SourceType>(first * cosAngle - second * sinAngle);
-                pSource[secondIndex] = static_cast<SourceType>(first * sinAngle + second * cosAngle);
+                pData[firstIndex] = static_cast<ValueType>(first * cosAngle - second * sinAngle);
+                pData[secondIndex] = static_cast<ValueType>(first * sinAngle + second * cosAngle);
             }
         }
     }
 
-    template void RoPE<lowp::f16, lowp::f16, lowp::f16>(lowp::f16*, const lowp::f16*, const lowp::f16*, size_t, size_t);
-    template void RoPE<lowp::f16, lowp::f16, lowp::f32>(lowp::f16*, const lowp::f16*, const lowp::f32*, size_t, size_t);
-    template void RoPE<lowp::f16, lowp::f32, lowp::f16>(lowp::f16*, const lowp::f32*, const lowp::f16*, size_t, size_t);
-    template void RoPE<lowp::f16, lowp::f32, lowp::f32>(lowp::f16*, const lowp::f32*, const lowp::f32*, size_t, size_t);
-    template void RoPE<lowp::f32, lowp::f16, lowp::f16>(lowp::f32*, const lowp::f16*, const lowp::f16*, size_t, size_t);
-    template void RoPE<lowp::f32, lowp::f16, lowp::f32>(lowp::f32*, const lowp::f16*, const lowp::f32*, size_t, size_t);
-    template void RoPE<lowp::f32, lowp::f32, lowp::f16>(lowp::f32*, const lowp::f32*, const lowp::f16*, size_t, size_t);
-    template void RoPE<lowp::f32, lowp::f32, lowp::f32>(lowp::f32*, const lowp::f32*, const lowp::f32*, size_t, size_t);
+    template void RoPE<lowp::f16, lowp::f16, lowp::f16>(lowp::f16*, const lowp::f16*, const lowp::f16*, std::size_t, std::size_t);
+    template void RoPE<lowp::f16, lowp::f16, lowp::f32>(lowp::f16*, const lowp::f16*, const lowp::f32*, std::size_t, std::size_t);
+    template void RoPE<lowp::f16, lowp::f32, lowp::f16>(lowp::f16*, const lowp::f32*, const lowp::f16*, std::size_t, std::size_t);
+    template void RoPE<lowp::f16, lowp::f32, lowp::f32>(lowp::f16*, const lowp::f32*, const lowp::f32*, std::size_t, std::size_t);
+    template void RoPE<lowp::f32, lowp::f16, lowp::f16>(lowp::f32*, const lowp::f16*, const lowp::f16*, std::size_t, std::size_t);
+    template void RoPE<lowp::f32, lowp::f16, lowp::f32>(lowp::f32*, const lowp::f16*, const lowp::f32*, std::size_t, std::size_t);
+    template void RoPE<lowp::f32, lowp::f32, lowp::f16>(lowp::f32*, const lowp::f32*, const lowp::f16*, std::size_t, std::size_t);
+    template void RoPE<lowp::f32, lowp::f32, lowp::f32>(lowp::f32*, const lowp::f32*, const lowp::f32*, std::size_t, std::size_t);
 
     template <class QType, class KType, class VType, class OutputType>
-    void Attention(const QType* pQ, const KType* pKCache, const VType* pVCache, OutputType* pOutput,
-                   size_t validTokenCount, size_t attentionHeadCount, size_t keyValueHeadCount, size_t headDimension)
+    void Attention(const QType* pQuery, const KType* pKCache,
+                   const VType* pVCache, OutputType* pOutput,
+                   std::size_t validTokenCount, std::size_t attentionHeadCount, std::size_t keyValueHeadCount,
+                   std::size_t headDimension)
     {
         if (validTokenCount == 0 || attentionHeadCount == 0 || keyValueHeadCount == 0 || headDimension == 0)
             return;
-
         if (attentionHeadCount % keyValueHeadCount != 0)
             return;
 
@@ -545,10 +549,8 @@ namespace Math
         {
             const auto kvHead = h / groupSize;
             const auto qOffset = h * headDimension;
-
             auto currentMaximumScore = -std::numeric_limits<float>::infinity();
             float probabilitySum{};
-
             std::size_t d{};
 
 #if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
@@ -575,7 +577,6 @@ namespace Math
             for (std::size_t t{}; t < validTokenCount; ++t)
             {
                 const auto kvOffset = (t * keyValueHeadCount + kvHead) * headDimension;
-
                 float score{};
                 d = 0;
 
@@ -596,7 +597,7 @@ namespace Math
                         {
                             const auto offset = d + accumulatorIndex * vectorWidth;
 
-                            accumulators[accumulatorIndex] = _mm256_fmadd_ps(Load8AsFloat(pQ + qOffset + offset),
+                            accumulators[accumulatorIndex] = _mm256_fmadd_ps(Load8AsFloat(pQuery + qOffset + offset),
                                                                              Load8AsFloat(pKCache + kvOffset + offset),
                                                                              accumulators[accumulatorIndex]);
                         }
@@ -607,18 +608,18 @@ namespace Math
 #endif
 
                 for (; d < headDimension; ++d)
-                    score += static_cast<float>(pQ[qOffset + d]) * static_cast<float>(pKCache[kvOffset + d]);
+                    score += static_cast<float>(pQuery[qOffset + d]) * static_cast<float>(pKCache[kvOffset + d]);
 
                 score *= scale;
 
                 float correction;
                 float probability;
 
+                // TODO: check exp simd
                 if (score > currentMaximumScore)
                 {
                     correction = std::exp(currentMaximumScore - score);
                     probability = 1.0f;
-
                     currentMaximumScore = score;
                 }
                 else
@@ -632,13 +633,13 @@ namespace Math
                 d = 0;
 
 #if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
-                const auto correctionVec = _mm256_set1_ps(correction);
-                const auto probabilityVec = _mm256_set1_ps(probability);
-
                 DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
                 {
                     constexpr std::size_t vectorWidth = 8;
                     constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+                    const auto correctionVec = _mm256_set1_ps(correction);
+                    const auto probabilityVec = _mm256_set1_ps(probability);
 
                     for (; d + blockSize <= headDimension; d += blockSize)
                     {
@@ -670,24 +671,21 @@ namespace Math
             d = 0;
 
 #if RUNTIME_ENABLE_AVX2 && defined(__AVX2__) && (defined(_MSC_VER) || (defined(__FMA__) && defined(__F16C__)))
-            const auto inverseProbabilitySumVec = _mm256_set1_ps(inverseProbabilitySum);
-
             DispatchAccumulatorCount([&]<std::size_t AccumulatorCount>
             {
                 constexpr std::size_t vectorWidth = 8;
                 constexpr std::size_t blockSize = AccumulatorCount * vectorWidth;
+
+                const auto inverseProbabilitySumVec = _mm256_set1_ps(inverseProbabilitySum);
 
                 for (; d + blockSize <= headDimension; d += blockSize)
                 {
                     for (std::size_t accumulatorIndex{}; accumulatorIndex < AccumulatorCount; ++accumulatorIndex)
                     {
                         const auto offset = d + accumulatorIndex * vectorWidth;
-
                         const auto output = Load8AsFloat(pOutput + qOffset + offset);
 
-                        Store8FromFloat(
-                            pOutput + qOffset + offset,
-                            _mm256_mul_ps(output, inverseProbabilitySumVec));
+                        Store8FromFloat(pOutput + qOffset + offset, _mm256_mul_ps(output, inverseProbabilitySumVec));
                     }
                 }
             });
@@ -702,56 +700,56 @@ namespace Math
     }
 
     template
-    void Attention<lowp::f16, lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, const lowp::f16*, lowp::f16*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f16, lowp::f16, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f16*, const lowp::f16*,
+                                                               lowp::f16*, std::size_t, std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f16, lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, const lowp::f16*, lowp::f32*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f16, lowp::f16, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f16*, const lowp::f16*,
+                                                               lowp::f32*, std::size_t, std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f16, lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f16*, const lowp::f32*, lowp::f16*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f16, lowp::f16, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f16*, const lowp::f32*,
+                                                               lowp::f16*, std::size_t, std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f16, lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f16*, const lowp::f32*, lowp::f32*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f16, lowp::f16, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f16*, const lowp::f32*,
+                                                               lowp::f32*, std::size_t, std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f16, lowp::f32, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f32*, const lowp::f16*, lowp::f16*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f16, lowp::f32, lowp::f16, lowp::f16>(const lowp::f16*, const lowp::f32*, const lowp::f16*,
+                                                               lowp::f16*, std::size_t, std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f16, lowp::f32, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f32*, const lowp::f16*, lowp::f32*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f16, lowp::f32, lowp::f16, lowp::f32>(const lowp::f16*, const lowp::f32*, const lowp::f16*,
+                                                               lowp::f32*, std::size_t, std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f16, lowp::f32, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, const lowp::f32*, lowp::f16*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f16, lowp::f32, lowp::f32, lowp::f16>(const lowp::f16*, const lowp::f32*, const lowp::f32*,
+                                                               lowp::f16*, std::size_t, std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f16, lowp::f32, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, const lowp::f32*, lowp::f32*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f16, lowp::f32, lowp::f32, lowp::f32>(const lowp::f16*, const lowp::f32*, const lowp::f32*,
+                                                               lowp::f32*, std::size_t, std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f32, lowp::f16, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, const lowp::f16*, lowp::f16*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f32, lowp::f16, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f16*, const lowp::f16*,
+                                                               lowp::f16*, std::size_t, std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f32, lowp::f16, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, const lowp::f16*, lowp::f32*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f32, lowp::f16, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f16*, const lowp::f16*, lowp::f32*, std::size_t,
+                                                               std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f32, lowp::f16, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f16*, const lowp::f32*, lowp::f16*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f32, lowp::f16, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f16*, const lowp::f32*,
+                                                               lowp::f16*, std::size_t, std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f32, lowp::f16, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f16*, const lowp::f32*, lowp::f32*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f32, lowp::f16, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f16*, const lowp::f32*,
+                                                               lowp::f32*, std::size_t, std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f32, lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f32*, const lowp::f16*, lowp::f16*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f32, lowp::f32, lowp::f16, lowp::f16>(const lowp::f32*, const lowp::f32*, const lowp::f16*,
+                                                               lowp::f16*, std::size_t, std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f32, lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f32*, const lowp::f16*, lowp::f32*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f32, lowp::f32, lowp::f16, lowp::f32>(const lowp::f32*, const lowp::f32*, const lowp::f16*, lowp::f32*, std::size_t,
+                                                               std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f32, lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, const lowp::f32*, lowp::f16*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f32, lowp::f32, lowp::f32, lowp::f16>(const lowp::f32*, const lowp::f32*, const lowp::f32*, lowp::f16*, std::size_t,
+                                                               std::size_t, std::size_t, std::size_t);
     template
-    void Attention<lowp::f32, lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, const lowp::f32*, lowp::f32*, size_t,
-                                                               size_t, size_t, size_t);
+    void Attention<lowp::f32, lowp::f32, lowp::f32, lowp::f32>(const lowp::f32*, const lowp::f32*, const lowp::f32*, lowp::f32*, std::size_t,
+                                                               std::size_t, std::size_t, std::size_t);
 
     template <class SourceType, class CacheType>
-    void CopyToCache(const SourceType* pSource, CacheType* pCache, size_t position, size_t elementCount)
+    void CopyToCache(const SourceType* pSrc, CacheType* pDest, std::size_t position, std::size_t elementCount)
     {
         const auto cacheOffset = position * elementCount;
 
@@ -768,18 +766,18 @@ namespace Math
                 {
                     const auto offset = i + accumulatorIndex * vectorWidth;
 
-                    Store8FromFloat(pCache + cacheOffset + offset, Load8AsFloat(pSource + offset));
+                    Store8FromFloat(pDest + cacheOffset + offset, Load8AsFloat(pSrc + offset));
                 }
             }
         });
 #endif
 
         for (; i < elementCount; ++i)
-            pCache[cacheOffset + i] = static_cast<CacheType>(static_cast<float>(pSource[i]));
+            pDest[cacheOffset + i] = static_cast<CacheType>(static_cast<float>(pSrc[i]));
     }
 
-    template void CopyToCache<lowp::f16, lowp::f16>(const lowp::f16*, lowp::f16*, size_t, size_t);
-    template void CopyToCache<lowp::f16, lowp::f32>(const lowp::f16*, lowp::f32*, size_t, size_t);
-    template void CopyToCache<lowp::f32, lowp::f16>(const lowp::f32*, lowp::f16*, size_t, size_t);
-    template void CopyToCache<lowp::f32, lowp::f32>(const lowp::f32*, lowp::f32*, size_t, size_t);
+    template void CopyToCache<lowp::f16, lowp::f16>(const lowp::f16*, lowp::f16*, std::size_t, std::size_t);
+    template void CopyToCache<lowp::f16, lowp::f32>(const lowp::f16*, lowp::f32*, std::size_t, std::size_t);
+    template void CopyToCache<lowp::f32, lowp::f16>(const lowp::f32*, lowp::f16*, std::size_t, std::size_t);
+    template void CopyToCache<lowp::f32, lowp::f32>(const lowp::f32*, lowp::f32*, std::size_t, std::size_t);
 }

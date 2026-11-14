@@ -37,9 +37,9 @@ struct Tensor
         if (dataType != DataTypeOf<T>)
             throw std::logic_error(name + " has an unexpected data type");
 
-        auto* data = static_cast<std::byte*>(buffer->Data()) + byteOffset;
+        auto* pData = static_cast<std::byte*>(buffer->GetData()) + byteOffset;
 
-        return reinterpret_cast<T*>(data);
+        return reinterpret_cast<T*>(pData);
     }
 
     template <class T>
@@ -51,9 +51,9 @@ struct Tensor
         if (dataType != DataTypeOf<T>)
             throw std::logic_error(name + " has an unexpected data type");
 
-        const auto* data = static_cast<const std::byte*>(buffer->Data()) + byteOffset;
+        const auto* pData = static_cast<const std::byte*>(buffer->GetData()) + byteOffset;
 
-        return reinterpret_cast<const T*>(data);
+        return reinterpret_cast<const T*>(pData);
     }
 
     [[nodiscard]]

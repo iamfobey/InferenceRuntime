@@ -1,8 +1,7 @@
 # InferenceRuntime
 
-Experimental C++20 CPU runtime for the SmolLM2 architecture. It loads a
-Hugging Face-compatible model directory and executes `float32`/`float16`
-inference and optional AVX2/FMA/F16C acceleration.
+Experimental C++20 CPU/CUDA runtime for the SmolLM2 architecture. It loads a
+Hugging Face-compatible model directory and executes inference and optional AVX2/FMA/F16C acceleration.
 
 ## Supported build environments
 
@@ -23,6 +22,7 @@ Install these tools in every environment you use:
 - Conan 2, available as `conan` on `PATH`;
 - a C++20 compiler: MSVC on Windows, GCC or Clang in WSL;
 - Ninja for Windows MSVC builds; `make` for WSL builds.
+- SmolLM2 model: [download](https://huggingface.co/HuggingFaceTB/SmolLM2-135M/tree/main)
 
 AVX2 are enabled by default. The accelerated build requires a CPU
 with AVX2, FMA, and F16C support.
@@ -91,17 +91,17 @@ tokenizer.json
 Windows example:
 
 ```powershell
-.\build\msvc-release\InferenceRuntime.exe smollm2 C:\models\SmolLM2-135M "Hello, world!" 1
+.\build\msvc-release\InferenceRuntime.exe cpu smollm2 C:\models\SmolLM2-135M "Hello, world!" 1
 ```
 
 WSL example:
 
 ```bash
-./build/wsl-release/InferenceRuntime smollm2 /mnt/c/models/SmolLM2-135M 'Hello, world!' 1
+./build/wsl-release/InferenceRuntime cpu smollm2 /mnt/c/models/SmolLM2-135M 'Hello, world!' 1
 ```
 
 Only the `smollm2` architecture identifier is currently supported. Weights
-must be in one `model.safetensors` file with `float16` tensors.
+must be in one `model.safetensors` file with `bf16` tensors.
 
 ## Benchmarks
 

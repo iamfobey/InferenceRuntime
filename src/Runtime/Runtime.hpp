@@ -16,7 +16,7 @@ class ITokenizer;
 struct RuntimeOptions
 {
     std::string_view modelArchitecture;
-    std::string backendDriver;
+    std::string backendDriver{"cpu"};
     CpuBackendOptions cpuBackendOptions;
 };
 
@@ -40,7 +40,7 @@ public:
     std::int32_t GenerateNextToken(int32_t currentToken);
 
     [[nodiscard]]
-    std::string Generate(std::string_view prompt, size_t maximumNewTokens);
+    std::string Generate(std::string_view prompt, std::size_t maximumNewTokens);
 
     [[nodiscard]]
     std::string_view ModelArchitecture() const noexcept;

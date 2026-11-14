@@ -10,14 +10,14 @@ public:
     virtual ~IBuffer() = default;
 
     [[nodiscard]]
-    virtual DeviceType Device() const noexcept = 0;
+    virtual DeviceType GetDeviceType() const noexcept = 0;
 
     [[nodiscard]]
-    virtual std::size_t SizeBytes() const noexcept = 0;
+    virtual std::size_t GetSize() const noexcept = 0;
 
     [[nodiscard]]
-    virtual void* Data() noexcept = 0;
+    virtual void* GetData() noexcept = 0;
 
     [[nodiscard]]
-    virtual const void* Data() const noexcept = 0;
+    virtual const void* GetData() const noexcept = 0;
 };

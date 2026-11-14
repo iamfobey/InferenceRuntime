@@ -22,9 +22,9 @@ public:
     [[nodiscard]]
     Tensor CreateTensor(TensorDimVec shape, DataType dataType) override;
 
-    void Upload(Tensor& destination, std::span<const float> source) override;
+    void Upload(Tensor& dest, std::span<const float> src) override;
 
-    void Download(const Tensor& source, std::span<float> destination) override;
+    void Download(const Tensor& src, std::span<float> dest) override;
 
     void Embedding(const Tensor& embeddingTable, std::span<const std::int32_t> tokenIds, Tensor& output) override;
 
@@ -42,13 +42,13 @@ public:
                            float theta) override;
 
     void RoPE(Tensor& source, const Tensor& inputCos, const Tensor& inputSin, std::size_t headCount,
-              size_t position, std::size_t headDimension) override;
+              std::size_t position, std::size_t headDimension) override;
 
-    void Attention(const Tensor& q, const Tensor& kCache, const Tensor& vCache,
-                   size_t validTokenCount, size_t attentionHeadCount, size_t keyValueHeadCount,
+    void Attention(const Tensor& query, const Tensor& kCache, const Tensor& vCache,
+                   std::size_t validTokenCount, std::size_t attentionHeadCount, std::size_t keyValueHeadCount,
                    Tensor& output) override;
 
-    void CopyToCache(const Tensor& source, Tensor& cache, size_t position) override;
+    void CopyToCache(const Tensor& src, Tensor& dest, std::size_t position) override;
 
     void Synchronize() override;
 

@@ -13,24 +13,24 @@ public:
     }
 
     [[nodiscard]]
-    DeviceType Device() const noexcept override
+    DeviceType GetDeviceType() const noexcept override
     {
         return DeviceType::CPU;
     }
 
     [[nodiscard]]
-    std::size_t SizeBytes() const noexcept override
+    std::size_t GetSize() const noexcept override
     {
         return m_Storage.size();
     }
 
-    void* Data() noexcept override
+    void* GetData() noexcept override
     {
         return m_Storage.data();
     }
 
     [[nodiscard]]
-    const void* Data() const noexcept override
+    const void* GetData() const noexcept override
     {
         return m_Storage.data();
     }

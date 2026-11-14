@@ -2,7 +2,7 @@
 
 #include <stdexcept>
 
-#include "Math/Math.hpp"
+#include "Math/MathCPU.hpp"
 
 namespace Utils
 {
@@ -10,10 +10,8 @@ namespace Utils
     {
         switch (dataType)
         {
-        case DataType::Float16:
-            return sizeof(std::uint16_t);
-        case DataType::Float32:
-            return sizeof(float);
+        case DataType::Float16: return sizeof(std::uint16_t);
+        case DataType::Float32: return sizeof(float);
         }
 
         throw std::invalid_argument("Unsupported DataType");
@@ -31,7 +29,7 @@ namespace Utils
             const auto index = i - 1;
 
             strides[index] = stride;
-            stride = Math::CheckedMultiply(stride, shape[index]);
+            stride = Math::CPU::CheckedMultiply(stride, shape[index]);
         }
 
         return strides;

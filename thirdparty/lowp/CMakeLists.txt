@@ -1,23 +1,23 @@
 ﻿cmake_minimum_required(VERSION 3.20)
 
 project(
-    lowp
-    VERSION 0.1.0
-    DESCRIPTION "Low-precision numeric types for C++"
-    LANGUAGES CXX
+        lowp
+        VERSION 0.1.0
+        DESCRIPTION "Low-precision numeric types for C++"
+        LANGUAGES CXX
 )
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(CheckCXXCompilerFlag)
 
-if(PROJECT_IS_TOP_LEVEL)
+if (PROJECT_IS_TOP_LEVEL)
     set(LOWP_BUILD_TESTS_DEFAULT ON)
     set(LOWP_INSTALL_DEFAULT ON)
-else()
+else ()
     set(LOWP_BUILD_TESTS_DEFAULT OFF)
     set(LOWP_INSTALL_DEFAULT OFF)
-endif()
+endif ()
 
 option(LOWP_BUILD_TESTS "Build lowp tests" ${LOWP_BUILD_TESTS_DEFAULT})
 option(LOWP_INSTALL "Enable lowp install rules" ${LOWP_INSTALL_DEFAULT})
@@ -29,104 +29,107 @@ add_library(lowp::lowp ALIAS lowp)
 
 target_compile_features(lowp INTERFACE cxx_std_17)
 target_include_directories(
-    lowp
-    INTERFACE
+        lowp
+        INTERFACE
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 target_compile_definitions(lowp INTERFACE
-    LOWP_HAS_F16C=$<BOOL:${LOWP_ENABLE_AVX2}>
+        "$<$<COMPILE_LANGUAGE:CXX>:LOWP_HAS_F16C=$<BOOL:${LOWP_ENABLE_AVX2}>>"
 )
 
-if(LOWP_ENABLE_AVX2)
-    if(MSVC)
+if (LOWP_ENABLE_AVX2)
+    if (MSVC)
         check_cxx_compiler_flag("/arch:AVX2" LOWP_COMPILER_SUPPORTS_AVX2)
 
-        if(NOT LOWP_COMPILER_SUPPORTS_AVX2)
+        if (NOT LOWP_COMPILER_SUPPORTS_AVX2)
             message(FATAL_ERROR "LOWP_ENABLE_AVX2=ON, but compiler does not support /arch:AVX2")
-        endif()
+        endif ()
 
-        target_compile_options(lowp INTERFACE "/arch:AVX2")
-    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(lowp INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:/arch:AVX2>")
+    elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         check_cxx_compiler_flag("-mavx2" LOWP_COMPILER_SUPPORTS_AVX2)
         check_cxx_compiler_flag("-mf16c" LOWP_COMPILER_SUPPORTS_F16C)
 
-        if(NOT LOWP_COMPILER_SUPPORTS_AVX2 OR NOT LOWP_COMPILER_SUPPORTS_F16C)
+        if (NOT LOWP_COMPILER_SUPPORTS_AVX2 OR NOT LOWP_COMPILER_SUPPORTS_F16C)
             message(FATAL_ERROR "LOWP_ENABLE_AVX2=ON, but compiler does not support AVX2/F16C")
-        endif()
+        endif ()
 
-        target_compile_options(lowp INTERFACE "-mavx2" "-mf16c")
-    else()
+        target_compile_options(lowp INTERFACE
+                "$<$<COMPILE_LANGUAGE:CXX>:-mavx2>"
+                "$<$<COMPILE_LANGUAGE:CXX>:-mf16c>"
+        )
+    else ()
         message(FATAL_ERROR "LOWP_ENABLE_AVX2=ON is unsupported by this compiler")
-    endif()
-endif()
+    endif ()
+endif ()
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
-if(Python3_Interpreter_FOUND)
+if (Python3_Interpreter_FOUND)
     file(GLOB_RECURSE LOWP_PUBLIC_HEADERS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/include/lowp/*.hpp")
 
     add_custom_target(
-        lowp-single-header
-        COMMAND
+            lowp-single-header
+            COMMAND
             "${Python3_EXECUTABLE}"
             "${PROJECT_SOURCE_DIR}/scripts/amalgamate.py"
             --source-root "${PROJECT_SOURCE_DIR}/include/lowp"
             --entry lowp.hpp
             --output "${PROJECT_SOURCE_DIR}/single_include/lowp.hpp"
-        DEPENDS ${LOWP_PUBLIC_HEADERS} "${PROJECT_SOURCE_DIR}/scripts/amalgamate.py"
-        COMMENT "Generating single_include/lowp.hpp"
-        VERBATIM
+            DEPENDS ${LOWP_PUBLIC_HEADERS} "${PROJECT_SOURCE_DIR}/scripts/amalgamate.py"
+            COMMENT "Generating single_include/lowp.hpp"
+            VERBATIM
     )
 
     add_custom_target(
-        lowp-check-single-header
-        COMMAND
+            lowp-check-single-header
+            COMMAND
             "${Python3_EXECUTABLE}"
             "${PROJECT_SOURCE_DIR}/scripts/amalgamate.py"
             --source-root "${PROJECT_SOURCE_DIR}/include/lowp"
             --entry lowp.hpp
             --output "${PROJECT_SOURCE_DIR}/single_include/lowp.hpp"
             --check
-        DEPENDS ${LOWP_PUBLIC_HEADERS} "${PROJECT_SOURCE_DIR}/scripts/amalgamate.py"
-        COMMENT "Checking single_include/lowp.hpp"
-        VERBATIM
+            DEPENDS ${LOWP_PUBLIC_HEADERS} "${PROJECT_SOURCE_DIR}/scripts/amalgamate.py"
+            COMMENT "Checking single_include/lowp.hpp"
+            VERBATIM
     )
-endif()
+endif ()
 
-if(LOWP_BUILD_TESTS)
+if (LOWP_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
-endif()
+endif ()
 
-if(LOWP_INSTALL)
+if (LOWP_INSTALL)
     install(TARGETS lowp EXPORT lowpTargets)
     install(DIRECTORY "${PROJECT_SOURCE_DIR}/include/" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
     install(FILES "${PROJECT_SOURCE_DIR}/single_include/lowp.hpp" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
     configure_package_config_file(
-        "${PROJECT_SOURCE_DIR}/cmake/lowpConfig.cmake.in"
-        "${PROJECT_BINARY_DIR}/lowpConfig.cmake"
-        INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/lowp"
+            "${PROJECT_SOURCE_DIR}/cmake/lowpConfig.cmake.in"
+            "${PROJECT_BINARY_DIR}/lowpConfig.cmake"
+            INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/lowp"
     )
 
     write_basic_package_version_file(
-        "${PROJECT_BINARY_DIR}/lowpConfigVersion.cmake"
-        VERSION ${PROJECT_VERSION}
-        COMPATIBILITY SameMajorVersion
+            "${PROJECT_BINARY_DIR}/lowpConfigVersion.cmake"
+            VERSION ${PROJECT_VERSION}
+            COMPATIBILITY SameMajorVersion
     )
 
     install(
-        EXPORT lowpTargets
-        FILE lowpTargets.cmake
-        NAMESPACE lowp::
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/lowp"
+            EXPORT lowpTargets
+            FILE lowpTargets.cmake
+            NAMESPACE lowp::
+            DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/lowp"
     )
 
     install(
-        FILES
+            FILES
             "${PROJECT_BINARY_DIR}/lowpConfig.cmake"
             "${PROJECT_BINARY_DIR}/lowpConfigVersion.cmake"
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/lowp"
+            DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/lowp"
     )
-endif()
+endif ()

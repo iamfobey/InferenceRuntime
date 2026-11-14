@@ -12,12 +12,23 @@
 #include "Utils/Utils.hpp"
 #include "spdlog/spdlog.h"
 
+#if RUNTIME_ENABLE_CUDA
+#include "Backend/CUDA/Backend.hpp"
+#endif
+
 Runtime::Runtime(const RuntimeOptions& options)
 {
     m_Model = ModelFactory::Create(options.modelArchitecture);
 
     if (options.backendDriver == "cpu")
         m_Backend = std::make_unique<CpuBackend>(options.cpuBackendOptions);
+#if RUNTIME_ENABLE_CUDA
+    else if (options.backendDriver == "cuda")
+        m_Backend = std::make_unique<CudaBackend>();
+#else
+    else if (options.backendDriver == "cuda")
+        spdlog::error("[runtime] CUDA backend is disabled; configure with ENABLE_CUDA=ON");
+#endif
     else
         spdlog::error("[runtime] unsupported {} backend", options.backendDriver);
 
@@ -43,7 +54,7 @@ bool Runtime::LoadModel(const std::string& path)
     }
 
     const auto start = std::chrono::steady_clock::now();
-    spdlog::info("[runtime] loading {} model from {}", m_Model->Architecture(), path);
+    spdlog::info("[runtime] loading {} model from {}", m_Model->GetArchitecture(), path);
     const bool loaded = m_Model->Load(path, *m_Backend);
     const auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     spdlog::info("[runtime] model load {}: {:.2f} s", loaded ? "completed" : "failed", elapsed);
@@ -94,12 +105,12 @@ std::int32_t Runtime::GenerateNextToken(int32_t currentToken)
     m_Model->DecodeStep(
         currentToken,
         *m_Backend
-    );
+        );
 
     return SampleGreedy();
 }
 
-std::string Runtime::Generate(std::string_view prompt, size_t maximumNewTokens)
+std::string Runtime::Generate(std::string_view prompt, std::size_t maximumNewTokens)
 {
     if (!m_Backend || !m_Model || maximumNewTokens == 0)
     {
@@ -169,7 +180,7 @@ std::string_view Runtime::ModelArchitecture() const noexcept
         return {};
     }
 
-    return m_Model->Architecture();
+    return m_Model->GetArchitecture();
 }
 
 const std::unique_ptr<IBackend>& Runtime::GetBackend() const noexcept
@@ -184,13 +195,14 @@ const std::unique_ptr<IModel>& Runtime::GetModel() const noexcept
 
 std::int32_t Runtime::SampleGreedy() const
 {
-    const auto& logits = m_Model->Logits();
-    const auto* pData = logits.FloatData();
+    const auto& logits = m_Model->GetLogits();
+    std::vector<float> values(Utils::ElementCount(logits.shape));
+    m_Backend->Download(logits, values);
 
     std::size_t bestIndex{};
 
-    for (std::size_t i = 1; i < Utils::ElementCount(logits.shape); ++i)
-        if (pData[i] > pData[bestIndex])
+    for (std::size_t i = 1; i < values.size(); ++i)
+        if (values[i] > values[bestIndex])
             bestIndex = i;
 
     return static_cast<std::int32_t>(bestIndex);

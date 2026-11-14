@@ -55,7 +55,7 @@ namespace
         for (std::size_t i{}; i < 8; ++i)
             model->DecodeStep(BenchmarkToken, *backend);
 
-        benchmark::DoNotOptimize(model->Logits().FloatData());
+        benchmark::DoNotOptimize(model->GetLogits().FloatData());
 
         model->Reset();
 
@@ -70,7 +70,7 @@ namespace
 
             const auto end = std::chrono::steady_clock::now();
 
-            benchmark::DoNotOptimize(model->Logits().FloatData());
+            benchmark::DoNotOptimize(model->GetLogits().FloatData());
 
             const std::chrono::duration<double> elapsed = end - start;
 
@@ -85,25 +85,30 @@ int main(const int argc, char** argv)
 {
     spdlog::set_level(spdlog::level::off);
 
-    if (argc < 4)
+    if (argc < 5)
     {
         spdlog::error(
-            "Usage: RuntimeBenchmark <architecture> <path to directory with model> <thread_count> [Google Benchmark options]");
+            "Usage: RuntimeBenchmark <backend driver> <architecture> <path to directory with model> <thread_count> [Google Benchmark options]");
 
         return 1;
     }
 
+    const auto backendDriver = argv[1];
+    const auto modelArchitecture = argv[2];
+    const auto modelPath = argv[3];
+    const auto threadCount = argv[4];
+
     RuntimeOptions options = {
-        .modelArchitecture = argv[1],
-        .backendDriver = "cpu",
+        .modelArchitecture = modelArchitecture,
+        .backendDriver = backendDriver,
         .cpuBackendOptions = {
-            .threadCount = std::atoi(argv[3])
+            .threadCount = std::atoi(threadCount)
         }
     };
 
     std::vector benchmarkArguments = {argv[0]};
 
-    benchmarkArguments.insert(benchmarkArguments.end(), argv + 4, argv + argc);
+    benchmarkArguments.insert(benchmarkArguments.end(), argv + 5, argv + argc);
 
     auto benchmarkArgumentCount = static_cast<int>(benchmarkArguments.size());
 
@@ -118,7 +123,7 @@ int main(const int argc, char** argv)
             "ModelLoad",
             BenchmarkModelLoad,
             options,
-            argv[2])
+            modelPath)
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond);
 
@@ -126,7 +131,7 @@ int main(const int argc, char** argv)
             "GenerationTG",
             BenchmarkGenerationTG,
             options,
-            argv[2])
+            modelPath)
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond);
 
